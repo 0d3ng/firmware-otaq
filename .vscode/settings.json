@@ -19,6 +19,9 @@
   "idf.flashType": "UART",
   "files.associations": {
     "ota_updater.h": "c",
-    "esp_ota_ops.h": "c"
+    "esp_ota_ops.h": "c",
+    "string.h": "c",
+    "esp_https_ota.h": "c",
+    "esp_http_client.h": "c"
   }
 }

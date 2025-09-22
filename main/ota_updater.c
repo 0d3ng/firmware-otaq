@@ -1,35 +1,28 @@
 #include "ota_updater.h"
 #include "esp_log.h"
-#include "esp_system.h"
+#include "esp_https_ota.h"
 #include "esp_ota_ops.h"
 #include "esp_http_client.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "monocypher.h"
-#include "unzip.h"
+#include "monocypher-ed25519.h"
+#include "mbedtls/sha256.h"
+#include "miniz.h"
 #include "cJSON.h"
 #include <string.h>
 #include <stdlib.h>
 
-static const char *TAG = "ota_updater";
-
-#define OTA_ZIP_URL "https://yourserver.example.com/update_package.zip"
-#define BUFFER_SIZE 1024
+#define OTA_URL "https://yourserver.com/firmware_package.zip"
+#define TAG "OTA_SECURE"
+#define MAX_SIZE (1024 * 512)
 #define SIG_LEN 64
-#define MAX_FILE_SIZE (1024 * 512) // 512 KB untuk buffer ekstraksi
 
-// Replace dengan public key kamu
-static const uint8_t PUBLIC_KEY[32] = {/* fill public key bytes */};
-
-// Flag OTA trigger via MQTT
+static const uint8_t PUBLIC_KEY[32] = {/* isi public key kamu */};
 static volatile bool ota_flag = false;
 
-void ota_trigger()
-{
-    ota_flag = true;
-}
-
-bool ota_triggered()
+void ota_trigger() { ota_flag = true; }
+bool ota_triggered(void)
 {
     if (ota_flag)
     {
@@ -39,20 +32,15 @@ bool ota_triggered()
     return false;
 }
 
-// Download file dari URL ke memory
-static uint8_t *download_file(const char *url, size_t *out_len)
+static uint8_t *download_zip(const char *url, size_t *out_len)
 {
-    esp_http_client_config_t config = {
-        .url = url,
-        .timeout_ms = 15000,
-    };
+    esp_http_client_config_t config = {.url = url, .timeout_ms = 15000};
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (!client)
         return NULL;
 
     if (esp_http_client_open(client, 0) != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to open URL");
         esp_http_client_cleanup(client);
         return NULL;
     }
@@ -60,7 +48,6 @@ static uint8_t *download_file(const char *url, size_t *out_len)
     int content_len = esp_http_client_fetch_headers(client);
     if (content_len <= 0)
     {
-        ESP_LOGE(TAG, "Invalid content length");
         esp_http_client_cleanup(client);
         return NULL;
     }
@@ -72,59 +59,103 @@ static uint8_t *download_file(const char *url, size_t *out_len)
         return NULL;
     }
 
-    int read_len = esp_http_client_read(client, (char *)buffer, content_len);
+    int read_len = esp_http_client_read_response(client, (char *)buffer, content_len);
+    esp_http_client_cleanup(client);
     if (read_len != content_len)
     {
-        ESP_LOGE(TAG, "Read mismatch");
         free(buffer);
-        esp_http_client_cleanup(client);
         return NULL;
     }
 
     *out_len = content_len;
-    esp_http_client_cleanup(client);
     return buffer;
 }
 
-// Verifikasi Ed25519 signature
-static bool verify_signature(const uint8_t *firmware, size_t fw_len, const uint8_t *sig)
-{
-    uint8_t hash[64];
-    crypto_sha512(hash, firmware, fw_len);
-    return crypto_sign_check(sig, hash, sizeof(hash), PUBLIC_KEY) == 0;
-}
-
-// Parse manifest.json dan cek hash firmware
-static bool parse_manifest(const char *manifest_str, const uint8_t *firmware, size_t fw_len)
+static bool verify_hash(const char *manifest_str, const uint8_t *firmware, size_t fw_len)
 {
     cJSON *json = cJSON_Parse(manifest_str);
     if (!json)
         return false;
 
-    const cJSON *version = cJSON_GetObjectItem(json, "version");
     const cJSON *hash = cJSON_GetObjectItem(json, "hash");
-    if (!version || !hash)
+    if (!hash)
     {
         cJSON_Delete(json);
         return false;
     }
 
-    uint8_t fw_sha256[32];
-    crypto_sha256(fw_sha256, firmware, fw_len);
+    uint8_t sha256[32];
+    mbedtls_sha256_context ctx;
+    mbedtls_sha256_init(&ctx);
+    mbedtls_sha256_starts(&ctx, 0);
+    mbedtls_sha256_update(&ctx, firmware, fw_len);
+    mbedtls_sha256_finish(&ctx, sha256);
+    mbedtls_sha256_free(&ctx);
 
-    char fw_hash_hex[65];
+    char hash_hex[65];
     for (int i = 0; i < 32; i++)
-        sprintf(fw_hash_hex + i * 2, "%02x", fw_sha256[i]);
-    fw_hash_hex[64] = '\0';
+        sprintf(hash_hex + i * 2, "%02x", sha256[i]);
+    hash_hex[64] = '\0';
 
-    bool ok = strcmp(fw_hash_hex, hash->valuestring) == 0;
+    bool match = strcmp(hash_hex, hash->valuestring) == 0;
     cJSON_Delete(json);
-    return ok;
+    return match;
+}
+
+static bool verify_signature(const uint8_t *manifest, size_t manifest_len, const uint8_t *signature)
+{
+    return crypto_ed25519_check(signature, PUBLIC_KEY, manifest, manifest_len) == 0;
+}
+
+bool extract_file_from_zip(const void *zip_data, size_t zip_size, const char *filename, uint8_t *out_buf, size_t max_len, size_t *out_len)
+{
+    mz_zip_archive zip;
+    memset(&zip, 0, sizeof(zip));
+
+    if (!mz_zip_reader_init_mem(&zip, zip_data, zip_size, 0))
+    {
+        ESP_LOGE(TAG, "ZIP init failed");
+        return false;
+    }
+
+    int file_index = mz_zip_reader_locate_file(&zip, filename, NULL, 0);
+    if (file_index < 0)
+    {
+        ESP_LOGE(TAG, "File %s not found in ZIP", filename);
+        mz_zip_reader_end(&zip);
+        return false;
+    }
+
+    mz_zip_archive_file_stat file_stat;
+    if (!mz_zip_reader_file_stat(&zip, file_index, &file_stat))
+    {
+        ESP_LOGE(TAG, "Failed to stat file %s", filename);
+        mz_zip_reader_end(&zip);
+        return false;
+    }
+
+    if (file_stat.m_uncomp_size > max_len)
+    {
+        ESP_LOGE(TAG, "File %s too large", filename);
+        mz_zip_reader_end(&zip);
+        return false;
+    }
+
+    if (!mz_zip_reader_extract_to_mem(&zip, file_index, out_buf, max_len, 0))
+    {
+        ESP_LOGE(TAG, "Failed to extract %s", filename);
+        mz_zip_reader_end(&zip);
+        return false;
+    }
+
+    *out_len = file_stat.m_uncomp_size;
+    mz_zip_reader_end(&zip);
+    return true;
 }
 
 void ota_task(void *pvParameter)
 {
-    uint8_t file_buffer[MAX_FILE_SIZE];
+    uint8_t buffer[MAX_SIZE];
 
     while (1)
     {
@@ -134,144 +165,97 @@ void ota_task(void *pvParameter)
             continue;
         }
 
-        ESP_LOGI(TAG, "OTA triggered! Downloading update package...");
-
+        ESP_LOGI(TAG, "Downloading OTA package...");
         size_t zip_len;
-        uint8_t *zip_data = download_file(OTA_ZIP_URL, &zip_len);
+        uint8_t *zip_data = download_zip(OTA_URL, &zip_len);
         if (!zip_data)
-        {
-            ESP_LOGE(TAG, "Failed to download update package");
             continue;
-        }
 
-        UNZIP_FILE zip_file;
-        if (unzip_open_from_memory(zip_data, zip_len, &zip_file) != UNZIP_OK)
-        {
-            ESP_LOGE(TAG, "Failed to open ZIP");
-            free(zip_data);
-            continue;
-        }
-
-        // Extract manifest.json
         size_t manifest_len;
-        if (unzip_extract_to_buffer(&zip_file, "manifest.json", file_buffer, MAX_FILE_SIZE, &manifest_len) != UNZIP_OK)
+        if (!extract_file_from_zip(zip_data, zip_len, "manifest.json", buffer, MAX_SIZE, &manifest_len))
         {
-            ESP_LOGE(TAG, "manifest.json not found");
-            unzip_close(&zip_file);
             free(zip_data);
             continue;
         }
-        char *manifest_str = malloc(manifest_len + 1);
-        memcpy(manifest_str, file_buffer, manifest_len);
-        manifest_str[manifest_len] = '\0';
 
-        // Extract firmware.bin
+        char *manifest = malloc(manifest_len + 1);
+        if (!manifest)
+        {
+            free(zip_data);
+            continue;
+        }
+        memcpy(manifest, buffer, manifest_len);
+        manifest[manifest_len] = '\0';
+
         size_t fw_len;
-        if (unzip_extract_to_buffer(&zip_file, "firmware.bin", file_buffer, MAX_FILE_SIZE, &fw_len) != UNZIP_OK)
+        if (!extract_file_from_zip(zip_data, zip_len, "firmware.bin", buffer, MAX_SIZE, &fw_len))
         {
-            ESP_LOGE(TAG, "firmware.bin not found");
-            free(manifest_str);
-            unzip_close(&zip_file);
+            free(manifest);
             free(zip_data);
             continue;
         }
+
         uint8_t *firmware = malloc(fw_len);
-        memcpy(firmware, file_buffer, fw_len);
-
-        // Extract firmware.sig
-        size_t sig_len;
-        if (unzip_extract_to_buffer(&zip_file, "firmware.sig", file_buffer, MAX_FILE_SIZE, &sig_len) != UNZIP_OK || sig_len != SIG_LEN)
+        if (!firmware)
         {
-            ESP_LOGE(TAG, "firmware.sig missing or wrong size");
-            free(firmware);
-            free(manifest_str);
-            unzip_close(&zip_file);
+            free(manifest);
             free(zip_data);
             continue;
         }
-        uint8_t *signature = malloc(sig_len);
-        memcpy(signature, file_buffer, sig_len);
+        memcpy(firmware, buffer, fw_len);
 
-        unzip_close(&zip_file);
+        size_t sig_len;
+        if (!extract_file_from_zip(zip_data, zip_len, "firmware.sig", buffer, MAX_SIZE, &sig_len) || sig_len != SIG_LEN)
+        {
+            free(firmware);
+            free(manifest);
+            free(zip_data);
+            continue;
+        }
+
+        uint8_t *signature = malloc(sig_len);
+        if (!signature)
+        {
+            free(firmware);
+            free(manifest);
+            free(zip_data);
+            continue;
+        }
+        memcpy(signature, buffer, sig_len);
         free(zip_data);
 
-        // Verify manifest
-        if (!parse_manifest(manifest_str, firmware, fw_len))
+        if (!verify_hash(manifest, firmware, fw_len))
         {
-            ESP_LOGE(TAG, "Manifest verification failed");
-            free(signature);
-            free(firmware);
-            free(manifest_str);
-            continue;
+            ESP_LOGE(TAG, "Hash mismatch");
+            goto cleanup;
         }
 
-        // Verify signature
         if (!verify_signature(firmware, fw_len, signature))
         {
-            ESP_LOGE(TAG, "Firmware signature invalid");
-            free(signature);
-            free(firmware);
-            free(manifest_str);
-            continue;
+            ESP_LOGE(TAG, "Signature invalid");
+            goto cleanup;
         }
 
-        ESP_LOGI(TAG, "Firmware verified. Begin OTA...");
+        ESP_LOGI(TAG, "Firmware verified. Starting OTA...");
 
         const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
-        if (!update_partition)
-        {
-            ESP_LOGE(TAG, "No OTA partition available");
-            free(signature);
-            free(firmware);
-            free(manifest_str);
-            continue;
-        }
-
         esp_ota_handle_t ota_handle;
-        if (esp_ota_begin(update_partition, fw_len, &ota_handle) != ESP_OK)
+        if (esp_ota_begin(update_partition, fw_len, &ota_handle) != ESP_OK ||
+            esp_ota_write(ota_handle, firmware, fw_len) != ESP_OK ||
+            esp_ota_end(ota_handle) != ESP_OK ||
+            esp_ota_set_boot_partition(update_partition) != ESP_OK)
         {
-            ESP_LOGE(TAG, "esp_ota_begin failed");
-            free(signature);
-            free(firmware);
-            free(manifest_str);
-            continue;
+            ESP_LOGE(TAG, "OTA failed");
+            goto cleanup;
         }
 
-        if (esp_ota_write(ota_handle, firmware, fw_len) != ESP_OK)
-        {
-            ESP_LOGE(TAG, "esp_ota_write failed");
-            esp_ota_end(ota_handle);
-            free(signature);
-            free(firmware);
-            free(manifest_str);
-            continue;
-        }
-
-        if (esp_ota_end(ota_handle) != ESP_OK)
-        {
-            ESP_LOGE(TAG, "esp_ota_end failed");
-            free(signature);
-            free(firmware);
-            free(manifest_str);
-            continue;
-        }
-
-        if (esp_ota_set_boot_partition(update_partition) != ESP_OK)
-        {
-            ESP_LOGE(TAG, "esp_ota_set_boot_partition failed");
-            free(signature);
-            free(firmware);
-            free(manifest_str);
-            continue;
-        }
-
-        ESP_LOGI(TAG, "OTA update complete! Rebooting...");
-
-        free(signature);
-        free(firmware);
-        free(manifest_str);
-
+        ESP_LOGI(TAG, "OTA success. Rebooting...");
         vTaskDelay(pdMS_TO_TICKS(500));
         esp_restart();
+
+    cleanup:
+        free(signature);
+        free(firmware);
+        free(manifest);
     }
 }
