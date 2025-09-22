@@ -22,6 +22,10 @@
     "esp_ota_ops.h": "c",
     "string.h": "c",
     "esp_https_ota.h": "c",
-    "esp_http_client.h": "c"
+    "esp_http_client.h": "c",
+    "freertos.h": "c",
+    "task.h": "c",
+    "sha256.h": "c",
+    "miniz.h": "c"
   }
 }

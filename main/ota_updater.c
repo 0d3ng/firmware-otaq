@@ -8,7 +8,7 @@
 #include "freertos/task.h"
 #include "monocypher-ed25519.h"
 #include "mbedtls/sha256.h"
-#include "miniz.h"
+#include "../miniz/miniz.h"
 #include "cJSON.h"
 #include <string.h>
 #include <stdlib.h>
