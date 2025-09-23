@@ -9,9 +9,10 @@
 #include "monocypher-ed25519.h"
 #include "mbedtls/sha256.h"
 #include "../miniz/miniz.h"
-#include "cJSON.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <stdio.h>
 
 #define OTA_URL "https://yourserver.com/firmware_package.zip"
 #define TAG "OTA_SECURE"
@@ -71,19 +72,37 @@ static uint8_t *download_zip(const char *url, size_t *out_len)
     return buffer;
 }
 
-static bool verify_hash(const char *manifest_str, const uint8_t *firmware, size_t fw_len)
+static bool parse_manifest(const char *manifest_str, char *hash_out, size_t hash_len, char *sig_out, size_t sig_len)
 {
-    cJSON *json = cJSON_Parse(manifest_str);
-    if (!json)
-        return false;
+    const char *hash_key = "\"hash\":\"";
+    const char *sig_key = "\"signature\":\"";
 
-    const cJSON *hash = cJSON_GetObjectItem(json, "hash");
-    if (!hash)
-    {
-        cJSON_Delete(json);
+    char *start = strstr(manifest_str, hash_key);
+    if (!start)
         return false;
-    }
+    start += strlen(hash_key);
+    char *end = strchr(start, '"');
+    if (!end || (end - start >= hash_len))
+        return false;
+    memcpy(hash_out, start, end - start);
+    hash_out[end - start] = '\0';
 
+    start = strstr(manifest_str, sig_key);
+    if (!start)
+        return false;
+    start += strlen(sig_key);
+    end = strchr(start, '"');
+    if (!end || (end - start >= sig_len))
+        return false;
+    memcpy(sig_out, start, end - start);
+    sig_out[end - start] = '\0';
+
+    return true;
+}
+
+// Verify firmware hash
+static bool verify_hash(const uint8_t *firmware, size_t fw_len, const char *expected_hash)
+{
     uint8_t sha256[32];
     mbedtls_sha256_context ctx;
     mbedtls_sha256_init(&ctx);
@@ -97,9 +116,7 @@ static bool verify_hash(const char *manifest_str, const uint8_t *firmware, size_
         sprintf(hash_hex + i * 2, "%02x", sha256[i]);
     hash_hex[64] = '\0';
 
-    bool match = strcmp(hash_hex, hash->valuestring) == 0;
-    cJSON_Delete(json);
-    return match;
+    return strcmp(hash_hex, expected_hash) == 0;
 }
 
 static bool verify_signature(const uint8_t *manifest, size_t manifest_len, const uint8_t *signature)
@@ -203,28 +220,23 @@ void ota_task(void *pvParameter)
             continue;
         }
         memcpy(firmware, buffer, fw_len);
-
-        size_t sig_len;
-        if (!extract_file_from_zip(zip_data, zip_len, "firmware.sig", buffer, MAX_SIZE, &sig_len) || sig_len != SIG_LEN)
-        {
-            free(firmware);
-            free(manifest);
-            free(zip_data);
-            continue;
-        }
-
-        uint8_t *signature = malloc(sig_len);
-        if (!signature)
-        {
-            free(firmware);
-            free(manifest);
-            free(zip_data);
-            continue;
-        }
-        memcpy(signature, buffer, sig_len);
         free(zip_data);
 
-        if (!verify_hash(manifest, firmware, fw_len))
+        // Parse manifest -> ambil hash & signature
+        char expected_hash[65];
+        char signature_hex[128]; // Ed25519 64 bytes -> hex 128 char
+        if (!parse_manifest(manifest, expected_hash, sizeof(expected_hash), signature_hex, sizeof(signature_hex)))
+        {
+            ESP_LOGE(TAG, "Failed to parse manifest");
+            goto cleanup;
+        }
+
+        // Convert hex signature ke bytes
+        uint8_t signature[64];
+        for (int i = 0; i < 64; i++)
+            sscanf(signature_hex + i * 2, "%2hhx", &signature[i]);
+
+        if (!verify_hash(firmware, fw_len, expected_hash))
         {
             ESP_LOGE(TAG, "Hash mismatch");
             goto cleanup;

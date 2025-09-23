@@ -26,6 +26,7 @@
     "freertos.h": "c",
     "task.h": "c",
     "sha256.h": "c",
-    "miniz.h": "c"
+    "miniz.h": "c",
+    "monocypher-ed25519.h": "c"
   }
 }

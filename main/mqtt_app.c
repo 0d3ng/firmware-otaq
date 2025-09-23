@@ -42,7 +42,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 void mqtt_app_start(void)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = "mqtt://broker.hivemq.com", // ganti broker kamu
+        .broker.address.uri = "mqtt://broker.sinaungoding.com", // ganti broker kamu
+        .credentials.username = "uwais",
+        .credentials.authentication.password = "uw415_4Lqarn1",
     };
 
     client = esp_mqtt_client_init(&mqtt_cfg);
