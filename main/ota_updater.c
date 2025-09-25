@@ -14,7 +14,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#define OTA_URL "https://yourserver.com/firmware_package.zip"
+#define OTA_URL "https://fastapi.sinaungoding.com/api/v1/firmware/firmware.zip"
 #define TAG "OTA_SECURE"
 #define MAX_SIZE (1024 * 512)
 #define SIG_LEN 64
@@ -205,7 +205,7 @@ void ota_task(void *pvParameter)
         manifest[manifest_len] = '\0';
 
         size_t fw_len;
-        if (!extract_file_from_zip(zip_data, zip_len, "firmware.bin", buffer, MAX_SIZE, &fw_len))
+        if (!extract_file_from_zip(zip_data, zip_len, "firmware-otaq.bin", buffer, MAX_SIZE, &fw_len))
         {
             free(manifest);
             free(zip_data);
