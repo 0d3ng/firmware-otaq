@@ -9,8 +9,8 @@
 static const char *TAG = "wifi_connect";
 
 // Ganti dengan SSID & password kamu
-#define WIFI_SSID "your_ssid"
-#define WIFI_PASS "your_password"
+#define WIFI_SSID "Laatahdhob"
+#define WIFI_PASS "janganmar4h"
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
