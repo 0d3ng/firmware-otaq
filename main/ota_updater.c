@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include "esp_https_ota.h"
 #include "esp_ota_ops.h"
+#include "esp_task_wdt.h"
 #include "esp_http_client.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -16,10 +17,10 @@
 
 #define OTA_URL "https://fastapi.sinaungoding.com/api/v1/firmware/firmware.zip"
 #define TAG "OTA_SECURE"
-#define MAX_SIZE (1024 * 512)
+#define MAX_SIZE 8192
 #define SIG_LEN 64
 
-static const uint8_t PUBLIC_KEY[32] = {0x64, 0xC0, 0x2C, 0x17, 0x41, 0x8C, 0xA3, 0xBE, 0x42, 0xE7, 0x76, 0x62, 0x99, 0xFE, 0xDE, 0x80, 0xC7, 0x30, 0x0F, 0x53, 0x9B, 0xA7, 0x63, 0xEE, 0x93, 0x92, 0x62, 0x60, 0x5B, 0x20, 0x13, 0xB1};
+static const uint8_t PUBLIC_KEY[32] = {0x57, 0xCD, 0xD9, 0xDE, 0xFF, 0x96, 0x69, 0x05, 0xAE, 0xA4, 0x94, 0x97, 0x28, 0x51, 0xAC, 0x38, 0x77, 0x92, 0x36, 0xC4, 0x07, 0xE0, 0x55, 0x23, 0x4B, 0xAA, 0xCE, 0x23, 0xCA, 0xD3, 0x37, 0x11};
 static volatile bool ota_flag = false;
 
 void ota_trigger() { ota_flag = true; }
@@ -172,8 +173,6 @@ bool extract_file_from_zip(const void *zip_data, size_t zip_size, const char *fi
 
 void ota_task(void *pvParameter)
 {
-    uint8_t buffer[MAX_SIZE];
-
     while (1)
     {
         if (!ota_triggered())
@@ -182,15 +181,34 @@ void ota_task(void *pvParameter)
             continue;
         }
 
-        ESP_LOGI(TAG, "Downloading OTA package...");
+        ESP_LOGI(TAG, "[OTA] Triggered");
+
+        // 1. Download ZIP
         size_t zip_len;
+        ESP_LOGI(TAG, "[OTA] Downloading ZIP from %s...", OTA_URL);
         uint8_t *zip_data = download_zip(OTA_URL, &zip_len);
         if (!zip_data)
+        {
+            ESP_LOGE(TAG, "[OTA] Download failed");
             continue;
+        }
 
+        // 2. Buffer ekstrak sementara
+        uint8_t *buffer = malloc(MAX_SIZE);
+        if (!buffer)
+        {
+            ESP_LOGE(TAG, "[OTA] Buffer malloc failed");
+            free(zip_data);
+            continue;
+        }
+
+        // 3. Extract manifest.json
         size_t manifest_len;
+        ESP_LOGI(TAG, "[OTA] Extracting manifest...");
         if (!extract_file_from_zip(zip_data, zip_len, "manifest.json", buffer, MAX_SIZE, &manifest_len))
         {
+            ESP_LOGE(TAG, "[OTA] Extract manifest failed");
+            free(buffer);
             free(zip_data);
             continue;
         }
@@ -198,16 +216,23 @@ void ota_task(void *pvParameter)
         char *manifest = malloc(manifest_len + 1);
         if (!manifest)
         {
+            ESP_LOGE(TAG, "[OTA] Manifest malloc failed");
+            free(buffer);
             free(zip_data);
             continue;
         }
         memcpy(manifest, buffer, manifest_len);
         manifest[manifest_len] = '\0';
+        ESP_LOGI(TAG, "[OTA] Manifest extracted:\n%s", manifest);
 
+        // 4. Extract firmware-otaq.bin
         size_t fw_len;
+        ESP_LOGI(TAG, "[OTA] Extracting firmware...");
         if (!extract_file_from_zip(zip_data, zip_len, "firmware-otaq.bin", buffer, MAX_SIZE, &fw_len))
         {
+            ESP_LOGE(TAG, "[OTA] Extract firmware failed");
             free(manifest);
+            free(buffer);
             free(zip_data);
             continue;
         }
@@ -215,58 +240,81 @@ void ota_task(void *pvParameter)
         uint8_t *firmware = malloc(fw_len);
         if (!firmware)
         {
+            ESP_LOGE(TAG, "[OTA] Firmware malloc failed");
             free(manifest);
+            free(buffer);
             free(zip_data);
             continue;
         }
         memcpy(firmware, buffer, fw_len);
+        free(buffer);
         free(zip_data);
 
-        // Parse manifest -> ambil hash & signature
+        // 5. Parse manifest -> hash & signature
         char expected_hash[65];
-        char signature_hex[128]; // Ed25519 64 bytes -> hex 128 char
+        char signature_hex[128];
         if (!parse_manifest(manifest, expected_hash, sizeof(expected_hash), signature_hex, sizeof(signature_hex)))
         {
-            ESP_LOGE(TAG, "Failed to parse manifest");
+            ESP_LOGE(TAG, "[OTA] Parse manifest failed");
             goto cleanup;
         }
+        ESP_LOGI(TAG, "[OTA] Expected hash: %s", expected_hash);
+        ESP_LOGI(TAG, "[OTA] Expected signature: %s", signature_hex);
 
-        // Convert hex signature ke bytes
         uint8_t signature[64];
         for (int i = 0; i < 64; i++)
             sscanf(signature_hex + i * 2, "%2hhx", &signature[i]);
+        ESP_LOGI(TAG, "[OTA] Signature converted to bytes");
 
         if (!verify_hash(firmware, fw_len, expected_hash))
         {
-            ESP_LOGE(TAG, "Hash mismatch");
+            ESP_LOGE(TAG, "[OTA] Hash mismatch");
             goto cleanup;
         }
-
         if (!verify_signature(firmware, fw_len, signature))
         {
-            ESP_LOGE(TAG, "Signature invalid");
+            ESP_LOGE(TAG, "[OTA] Signature invalid");
             goto cleanup;
         }
 
-        ESP_LOGI(TAG, "Firmware verified. Starting OTA...");
-
+        ESP_LOGI(TAG, "[OTA] Firmware verified. Starting OTA...");
         const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
         esp_ota_handle_t ota_handle;
-        if (esp_ota_begin(update_partition, fw_len, &ota_handle) != ESP_OK ||
-            esp_ota_write(ota_handle, firmware, fw_len) != ESP_OK ||
-            esp_ota_end(ota_handle) != ESP_OK ||
-            esp_ota_set_boot_partition(update_partition) != ESP_OK)
+
+        if (esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &ota_handle) != ESP_OK)
         {
-            ESP_LOGE(TAG, "OTA failed");
+            ESP_LOGE(TAG, "[OTA] OTA begin failed");
             goto cleanup;
         }
 
-        ESP_LOGI(TAG, "OTA success. Rebooting...");
+        // 6. Write firmware per chunk + reset WDT
+        size_t chunk_size = 1024;
+        for (size_t offset = 0; offset < fw_len; offset += chunk_size)
+        {
+            size_t write_size = (offset + chunk_size > fw_len) ? (fw_len - offset) : chunk_size;
+            esp_err_t err = esp_ota_write(ota_handle, firmware + offset, write_size);
+            if (err != ESP_OK)
+            {
+                ESP_LOGE(TAG, "[OTA] OTA write failed at offset %d", offset);
+                esp_ota_end(ota_handle);
+                goto cleanup;
+            }
+            esp_task_wdt_reset(); // reset WDT
+            int progress = (int)(((offset + write_size) * 100) / fw_len);
+            ESP_LOGI(TAG, "[OTA] Progress: %d%% (%d/%d bytes)", progress, offset + write_size, fw_len);
+        }
+
+        if (esp_ota_end(ota_handle) != ESP_OK || esp_ota_set_boot_partition(update_partition) != ESP_OK)
+        {
+            ESP_LOGE(TAG, "[OTA] OTA end/set boot failed");
+            goto cleanup;
+        }
+
+        ESP_LOGI(TAG, "[OTA] OTA success. Rebooting...");
         vTaskDelay(pdMS_TO_TICKS(500));
         esp_restart();
 
     cleanup:
-        free(signature);
         free(firmware);
         free(manifest);
     }
