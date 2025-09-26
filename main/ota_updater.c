@@ -15,12 +15,15 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#define OTA_URL "https://fastapi.sinaungoding.com/api/v1/firmware/firmware.zip"
+// production
+// #define OTA_URL "https://fastapi.sinaungoding.com/api/v1/firmware/firmware.zip"
+// development
+#define OTA_URL "http://192.168.10.102:8000/api/v1/firmware/firmware.zip"
 #define TAG "OTA_SECURE"
 #define MAX_SIZE 8192
 #define SIG_LEN 64
 
-static const uint8_t PUBLIC_KEY[32] = {0x57, 0xCD, 0xD9, 0xDE, 0xFF, 0x96, 0x69, 0x05, 0xAE, 0xA4, 0x94, 0x97, 0x28, 0x51, 0xAC, 0x38, 0x77, 0x92, 0x36, 0xC4, 0x07, 0xE0, 0x55, 0x23, 0x4B, 0xAA, 0xCE, 0x23, 0xCA, 0xD3, 0x37, 0x11};
+static const uint8_t PUBLIC_KEY[32] = {0x23, 0x1F, 0x48, 0x12, 0x84, 0xAF, 0x53, 0x40, 0xF5, 0xCC, 0x36, 0xBD, 0x27, 0xA8, 0x84, 0x25, 0x14, 0x88, 0xD1, 0xD0, 0x41, 0x38, 0xDE, 0x9D, 0x45, 0x6C, 0xF2, 0x6D, 0x28, 0xD9, 0xF9, 0xEF};
 static volatile bool ota_flag = false;
 
 void ota_trigger() { ota_flag = true; }
@@ -36,13 +39,21 @@ bool ota_triggered(void)
 
 static uint8_t *download_zip(const char *url, size_t *out_len)
 {
-    esp_http_client_config_t config = {.url = url, .timeout_ms = 15000};
+    esp_http_client_config_t config = {
+        .url = url,
+        .cert_pem = NULL, // Add server certificate if needed
+        .skip_cert_common_name_check = true,
+        .timeout_ms = 15000};
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (!client)
-        return NULL;
-
-    if (esp_http_client_open(client, 0) != ESP_OK)
     {
+        ESP_LOGE(TAG, "Failed to init HTTP client");
+        return NULL;
+    }
+    esp_err_t err = esp_http_client_open(client, 0);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "esp_http_client_open failed: %s", esp_err_to_name(err));
         esp_http_client_cleanup(client);
         return NULL;
     }
@@ -50,13 +61,15 @@ static uint8_t *download_zip(const char *url, size_t *out_len)
     int content_len = esp_http_client_fetch_headers(client);
     if (content_len <= 0)
     {
+        ESP_LOGE(TAG, "Invalid content length: %d", content_len);
         esp_http_client_cleanup(client);
         return NULL;
     }
-
+    ESP_LOGI(TAG, "Content length: %d", content_len);
     uint8_t *buffer = malloc(content_len);
     if (!buffer)
     {
+        ESP_LOGE(TAG, "Failed to malloc %d bytes", content_len);
         esp_http_client_cleanup(client);
         return NULL;
     }
@@ -65,6 +78,7 @@ static uint8_t *download_zip(const char *url, size_t *out_len)
     esp_http_client_cleanup(client);
     if (read_len != content_len)
     {
+        ESP_LOGE(TAG, "esp_http_client_read_response failed: %d", read_len);
         free(buffer);
         return NULL;
     }

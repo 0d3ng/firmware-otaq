@@ -14,7 +14,7 @@ void sensor_task(void *pvParameter)
         int dummy_value = rand() % 100; // dummy sensor
         char payload[32];
         snprintf(payload, sizeof(payload), "{\"sensor\":%d}", dummy_value);
-        mqtt_publish("device/001/sensor", payload);
+        mqtt_publish("device/002/sensor", payload);
         ESP_LOGI(TAG, "Published sensor value: %d", dummy_value);
         vTaskDelay(pdMS_TO_TICKS(5000));
     }

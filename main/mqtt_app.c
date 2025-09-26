@@ -13,7 +13,7 @@ static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
     {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT connected");
-        esp_mqtt_client_subscribe(client, "device/001/ota/update", 1);
+        esp_mqtt_client_subscribe(client, "device/002/ota/update", 1);
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT disconnected");
@@ -22,7 +22,7 @@ static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
         ESP_LOGI(TAG, "MQTT topic: %.*s, data: %.*s",
                  event->topic_len, event->topic,
                  event->data_len, event->data);
-        if (strncmp(event->topic, "device/001/ota/update", event->topic_len) == 0 &&
+        if (strncmp(event->topic, "device/002/ota/update", event->topic_len) == 0 &&
             strncmp(event->data, "start", event->data_len) == 0)
         {
             ota_trigger();
