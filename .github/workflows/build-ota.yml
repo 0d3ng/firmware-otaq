@@ -35,10 +35,10 @@ jobs:
         idf.py build
 
     - name: Create manifest.json & package using PyNaCl
+        env:
+            ED25519_PRIVATE_KEY_HEX: ${{ secrets.ED25519_PRIVATE_KEY_HEX }}
+            VERSION: ${{ github.run_number }}  # or any other versioning scheme
       run: |
-        FW_FILE=build/firmware-otaq.bin
-        VERSION=$(date +%Y.%m.%d-%H%M)
-
         python3 - <<'EOF'
 import json, hashlib
 from nacl.signing import SigningKey
