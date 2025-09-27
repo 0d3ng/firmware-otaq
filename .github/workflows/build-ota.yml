@@ -1,0 +1,74 @@
+name: ESP-IDF Build & Secure OTA (PyNaCl)
+
+on:
+  push:
+    branches: 
+        - master
+        - development
+
+jobs:
+  build-ota:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install ESP-IDF & dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git wget flex bison gperf python3 python3-pip cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 zip curl
+        git clone --depth 1 --branch v5.1.1 https://github.com/espressif/esp-idf.git $HOME/esp-idf
+        $HOME/esp-idf/install.sh esp32
+        echo "$HOME/esp-idf/export.sh" >> $GITHUB_ENV
+        pip install pynacl
+
+    - name: Build firmware
+      run: |
+        source $HOME/esp-idf/export.sh
+        idf.py set-target esp32
+        idf.py build
+
+    - name: Create manifest.json & package using PyNaCl
+      run: |
+        FW_FILE=build/firmware-otaq.bin
+        VERSION=$(date +%Y.%m.%d-%H%M)
+
+        python3 - <<'EOF'
+import json, hashlib
+from nacl.signing import SigningKey
+from nacl.encoding import HexEncoder
+import os
+
+fw_file = "build/firmware-otaq.bin"
+with open(fw_file, "rb") as f:
+    data = f.read()
+digest = hashlib.sha256(data).digest()
+
+# Load private key from GitHub Secrets (hex string)
+private_key_hex = os.environ["ED25519_PRIVATE_KEY_HEX"]
+sk = SigningKey(bytes.fromhex(private_key_hex))
+signature = sk.sign(digest).signature.hex()
+
+metadata = {
+    "version": os.environ.get("VERSION", "1.0.0"),
+    "hash": hashlib.sha256(data).hexdigest(),
+    "signature": signature
+}
+print(f"Manifest: {metadata}")
+with open("manifest.json", "w") as f:
+    json.dump(metadata, f, indent=2)
+EOF
+
+        zip firmware.zip build/firmware-otaq.bin manifest.json
+
+    - name: Upload package via API
+      run: |
+        curl -X POST "${{ secrets.API_URL }}/firmware/upload" \
+          -H "Authorization: Bearer ${{ secrets.API_TOKEN }}" \
+          -F "file=@firmware.zip"
