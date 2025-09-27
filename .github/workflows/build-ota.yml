@@ -18,16 +18,18 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: "3.11"
+    
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y zip curl
 
-    - name: Install ESP-IDF & dependencies
+    - name: Install Python dependencies
+      run: pip install pynacl
+
+    - name: Setup ESP-IDF
       run: |
-        sudo apt-get update
-        sudo apt-get install -y git wget flex bison gperf python3 python3-pip cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 zip curl
         git clone --depth 1 --branch v5.1.1 https://github.com/espressif/esp-idf.git $HOME/esp-idf
         cd $HOME/esp-idf
         ./install.sh esp32
-        echo ". $HOME/esp-idf/export.sh" >> $GITHUB_ENV
-        pip install pynacl
 
     - name: Build firmware
       run: |
