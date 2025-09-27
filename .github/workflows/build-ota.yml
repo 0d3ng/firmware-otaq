@@ -47,14 +47,17 @@ jobs:
         from nacl.signing import SigningKey
         from nacl.encoding import HexEncoder
         import os
+        print("nacl version:", SigningKey.__module__)
 
         fw_file = "build/firmware-otaq.bin"
         with open(fw_file, "rb") as f:
             data = f.read()
         digest = hashlib.sha256(data).digest()
+        print(f"Firmware {fw_file} size={len(data)} sha256={digest.hex()}")
 
         # Load private key from GitHub Secrets (hex string)
         private_key_hex = os.environ["ED25519_PRIVATE_KEY_HEX"]
+        print(f"Private key hex: {private_key_hex} len={len(private_key_hex)}")
         seed = bytes.fromhex(private_key_hex)
         print(f"Using private key: {private_key_hex} len={len(seed)}")
         sk = SigningKey(seed)
