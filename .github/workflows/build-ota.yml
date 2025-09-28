@@ -38,18 +38,17 @@ jobs:
         idf.py set-target esp32
         idf.py build
 
-    - name: Debug secret
-      shell: bash
-      run: | 
-        echo "Secret length: ${#ED25519_PRIVATE_KEY_HEX}, Value: ${ED25519_PRIVATE_KEY_HEX}"
-      env:
-        ED25519_PRIVATE_KEY_HEX: ${{ secrets.ED25519_PRIVATE_KEY_HEX }}
-        VERSION: ${{ github.run_number }}  # or any other versioning scheme
+    - name: Set VERSION string
+      id: version
+      run: |
+        COMMIT=$(git rev-parse --short HEAD)
+        TIME=$(date -u +"%Y%m%dT%H%M")
+        echo "VERSION=${COMMIT}-${TIME}-build${{ github.run_number }}" >> $GITHUB_ENV
 
     - name: Create manifest.json & package using PyNaCl
       env:
         ED25519_PRIVATE_KEY_HEX: ${{ secrets.ED25519_PRIVATE_KEY_HEX }}
-        VERSION: ${{ github.run_number }}  # or any other versioning scheme        
+        VERSION: ${{ env.VERSION }}  # or any other versioning scheme        
       run: |
         python3 - <<'EOF'
         import json, hashlib
