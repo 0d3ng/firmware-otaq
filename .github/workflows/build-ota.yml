@@ -56,8 +56,11 @@ jobs:
         print(f"Firmware {fw_file} size={len(data)} sha256={digest.hex()}")
 
         # Load private key from GitHub Secrets (hex string)
-        private_key_hex = os.environ["ED25519_PRIVATE_KEY_HEX"]
+        private_key_hex = os.environ.get("ED25519_PRIVATE_KEY_HEX","").strip()
+        if len(private_key_hex) != 64:
+            raise ValueError("Invalid ED25519 private key length")
         print(f"Private key hex: {private_key_hex} len={len(private_key_hex)}")
+        
         seed = bytes.fromhex(private_key_hex)
         print(f"Using private key: {private_key_hex} len={len(seed)}")
         sk = SigningKey(seed)
