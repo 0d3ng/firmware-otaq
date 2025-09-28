@@ -37,10 +37,15 @@ jobs:
         idf.py set-target esp32
         idf.py build
 
-    - name: Create manifest.json & package using PyNaCl
+    - name: Debug secret
+      shell: bash
+      run: | 
+        echo "Secret length: ${#ED25519_PRIVATE_KEY_HEX}, Value: ${ED25519_PRIVATE_KEY_HEX}"
       env:
         ED25519_PRIVATE_KEY_HEX: ${{ secrets.ED25519_PRIVATE_KEY_HEX }}
         VERSION: ${{ github.run_number }}  # or any other versioning scheme
+
+    - name: Create manifest.json & package using PyNaCl        
       run: |
         python3 - <<'EOF'
         import json, hashlib
@@ -60,7 +65,7 @@ jobs:
         if len(private_key_hex) != 64:
             raise ValueError("Invalid ED25519 private key length")
         print(f"Private key hex: {private_key_hex} len={len(private_key_hex)}")
-        
+
         seed = bytes.fromhex(private_key_hex)
         print(f"Using private key: {private_key_hex} len={len(seed)}")
         sk = SigningKey(seed)
