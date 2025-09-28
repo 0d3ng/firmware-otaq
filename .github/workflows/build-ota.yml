@@ -9,6 +9,7 @@ on:
 jobs:
   build-ota:
     runs-on: ubuntu-latest
+    environment: firmware env
 
     steps:
     - name: Checkout repository
