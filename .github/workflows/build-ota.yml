@@ -46,7 +46,10 @@ jobs:
         ED25519_PRIVATE_KEY_HEX: ${{ secrets.ED25519_PRIVATE_KEY_HEX }}
         VERSION: ${{ github.run_number }}  # or any other versioning scheme
 
-    - name: Create manifest.json & package using PyNaCl        
+    - name: Create manifest.json & package using PyNaCl
+      env:
+        ED25519_PRIVATE_KEY_HEX: ${{ secrets.ED25519_PRIVATE_KEY_HEX }}
+        VERSION: ${{ github.run_number }}  # or any other versioning scheme        
       run: |
         python3 - <<'EOF'
         import json, hashlib
@@ -65,7 +68,7 @@ jobs:
         private_key_hex = os.environ.get("ED25519_PRIVATE_KEY_HEX","").strip()
         print(f"Raw key repr: {repr(private_key_hex)}")
         print(f"Length after strip: {len(private_key_hex)}")
-        
+
         if len(private_key_hex) != 64:
             raise ValueError("Invalid ED25519 private key length")
         print(f"Private key hex: {private_key_hex} len={len(private_key_hex)}")
