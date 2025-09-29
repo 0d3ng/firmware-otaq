@@ -9,6 +9,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "monocypher-ed25519.h"
+#include "cJSON.h"
 #include "mbedtls/sha256.h"
 #include "../miniz/miniz.h"
 #include <string.h>
@@ -16,8 +17,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-// #define OTA_URL "http://192.168.10.102:8000/api/v1/firmware/firmware.zip"
-#define OTA_URL "http://192.168.137.1:8000/api/v1/firmware/firmware.zip"
+#define OTA_URL "http://192.168.10.102:8000/api/v1/firmware/firmware.zip"
+// #define OTA_URL "http://192.168.137.1:8000/api/v1/firmware/firmware.zip"
 #define TAG "OTA_SECURE"
 #define MAX_MANIFEST_SIZE 4096
 #define SIG_LEN 64
@@ -25,11 +26,7 @@
 #define UPDATE_ZIP_PATH "/spiffs/update.zip"
 #define FIRMWARE_ENTRY_NAME "firmware-otaq.bin" // sesuai zipmu
 
-static const uint8_t PUBLIC_KEY[32] = {
-    0x23, 0x1F, 0x48, 0x12, 0x84, 0xAF, 0x53, 0x40,
-    0xF5, 0xCC, 0x36, 0xBD, 0x27, 0xA8, 0x84, 0x25,
-    0x14, 0x88, 0xD1, 0xD0, 0x41, 0x38, 0xDE, 0x9D,
-    0x45, 0x6C, 0xF2, 0x6D, 0x28, 0xD9, 0xF9, 0xEF};
+static const uint8_t PUBLIC_KEY[32] = {0x84, 0xCE, 0x80, 0x59, 0x6A, 0x49, 0xF7, 0xA8, 0x34, 0x2F, 0x5D, 0xB1, 0x40, 0x4E, 0x26, 0x12, 0xF1, 0x58, 0xA5, 0xD7, 0x4C, 0x95, 0xE0, 0x5D, 0x62, 0xD2, 0xE2, 0x17, 0x60, 0x37, 0x80, 0x23};
 
 static volatile bool ota_flag = false;
 void ota_trigger() { ota_flag = true; }
@@ -140,9 +137,11 @@ static bool download_zip_to_spiffs(const char *url)
             free(buffer);
             fclose(f);
             esp_http_client_cleanup(client);
+            esp_task_wdt_reset();
             return false;
         }
         total_read += read_len;
+        esp_task_wdt_reset();
     }
 
     free(buffer);
@@ -151,34 +150,39 @@ static bool download_zip_to_spiffs(const char *url)
     return true;
 }
 
-/* ---------------- Simple manifest parser (string match) ----------------
-   Expects JSON keys "hash" and "signature". Keep simple as before.
+/* ---------------- cJSON manifest parser ----------------
+   Expects JSON keys "hash" and "signature".
 */
 static bool parse_manifest(const char *manifest_str, char *hash_out, size_t hash_len, char *sig_out, size_t sig_len)
 {
-    const char *hash_key = "\"hash\":\"";
-    const char *sig_key = "\"signature\":\"";
+    cJSON *root = cJSON_Parse(manifest_str);
+    if (!root)
+    {
+        ESP_LOGE(TAG, "Failed to parse manifest JSON");
+        return false;
+    }
 
-    const char *start = strstr(manifest_str, hash_key);
-    if (!start)
-        return false;
-    start += strlen(hash_key);
-    const char *end = strchr(start, '"');
-    if (!end || (size_t)(end - start) >= hash_len)
-        return false;
-    memcpy(hash_out, start, end - start);
-    hash_out[end - start] = '\0';
+    const cJSON *hash_item = cJSON_GetObjectItemCaseSensitive(root, "hash");
+    const cJSON *sig_item = cJSON_GetObjectItemCaseSensitive(root, "signature");
 
-    start = strstr(manifest_str, sig_key);
-    if (!start)
+    if (!cJSON_IsString(hash_item) || !cJSON_IsString(sig_item))
+    {
+        ESP_LOGE(TAG, "Manifest fields missing or not strings");
+        cJSON_Delete(root);
         return false;
-    start += strlen(sig_key);
-    end = strchr(start, '"');
-    if (!end || (size_t)(end - start) >= sig_len)
-        return false;
-    memcpy(sig_out, start, end - start);
-    sig_out[end - start] = '\0';
+    }
 
+    if (strlen(hash_item->valuestring) >= hash_len || strlen(sig_item->valuestring) >= sig_len)
+    {
+        ESP_LOGE(TAG, "Manifest values too long for buffers");
+        cJSON_Delete(root);
+        return false;
+    }
+
+    strncpy(hash_out, hash_item->valuestring, hash_len);
+    strncpy(sig_out, sig_item->valuestring, sig_len);
+
+    cJSON_Delete(root);
     return true;
 }
 
@@ -485,6 +489,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
 */
 void ota_task(void *pvParameter)
 {
+    esp_task_wdt_add(NULL);
     mount_spiffs();
 
     while (1)
@@ -492,6 +497,7 @@ void ota_task(void *pvParameter)
         if (!ota_triggered())
         {
             vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_task_wdt_reset();
             continue;
         }
 
