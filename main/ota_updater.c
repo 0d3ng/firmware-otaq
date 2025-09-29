@@ -17,7 +17,11 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#define OTA_URL "http://192.168.10.102:8000/api/v1/firmware/firmware.zip"
+// cloudflared server
+#define OTA_URL "https://fastapi.sinaungoding.com/api/v1/firmware/firmware.zip"
+// apatos server
+// #define OTA_URL "http://192.168.10.102:8000/api/v1/firmware/firmware.zip"
+// local lab server
 // #define OTA_URL "http://192.168.137.1:8000/api/v1/firmware/firmware.zip"
 #define TAG "OTA_SECURE"
 #define MAX_MANIFEST_SIZE 4096

@@ -79,7 +79,7 @@ jobs:
 
         metadata = {
             "version": os.environ.get("VERSION", "1.0.0"),
-            "hash": hashlib.sha256(data).hexdigest(),
+            "hash": digest.hex(),
             "signature": signature
         }
         print(f"Manifest: {metadata}")
