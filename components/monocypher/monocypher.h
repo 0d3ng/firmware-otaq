@@ -56,7 +56,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <inttypes.h>
 
 #ifdef MONOCYPHER_CPP_NAMESPACE
 namespace MONOCYPHER_CPP_NAMESPACE
