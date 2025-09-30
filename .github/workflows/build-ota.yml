@@ -106,6 +106,15 @@ jobs:
 
       - name: Upload package via API
         run: |
-          curl -X POST "${{ secrets.API_URL }}/firmware/upload" \
+          STATUS=$(curl -s -o response.txt -w "%{http_code}" \
+            -X POST "${{ secrets.API_URL }}/firmware/upload" \
             -H "Authorization: Bearer ${{ secrets.API_TOKEN }}" \
-            -F "file=@firmware.zip"
+            -F "file=@firmware.zip")
+
+          echo "Response code: $STATUS"
+          if [ "$STATUS" -ne 200 ]; then
+            echo "❌ Upload failed with status $STATUS"
+            cat response.txt
+            exit 1
+          fi
+          echo "✅ Upload successful"
