@@ -17,8 +17,10 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+// polinema server
+#define OTA_URL "http://103.172.249.254:8000/api/v1/firmware/firmware.zip"
 // cloudflared server
-#define OTA_URL "https://fastapi.sinaungoding.com/api/v1/firmware/firmware.zip"
+// #define OTA_URL "https://fastapi.sinaungoding.com/api/v1/firmware/firmware.zip"
 // apatos server
 // #define OTA_URL "http://192.168.10.102:8000/api/v1/firmware/firmware.zip"
 // local lab server
