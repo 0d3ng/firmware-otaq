@@ -16,9 +16,12 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <isrgrootx1.h>
 
+// polinema server https
+#define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firware/firmware.zip"
 // polinema server
-#define OTA_URL "http://103.172.249.254:8000/api/v1/firmware/firmware.zip"
+// #define OTA_URL "http://103.172.249.254:8000/api/v1/firmware/firmware.zip"
 // cloudflared server
 // #define OTA_URL "https://fastapi.sinaungoding.com/api/v1/firmware/firmware.zip"
 // apatos server
@@ -74,8 +77,8 @@ static bool download_zip_to_spiffs(const char *url)
 {
     esp_http_client_config_t config = {
         .url = url,
-        .cert_pem = NULL,
-        .skip_cert_common_name_check = true,
+        .cert_pem = (const char *)isrgrootx1_pem,
+        .skip_cert_common_name_check = false,
         .timeout_ms = 30000};
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
