@@ -19,7 +19,7 @@
 #include <isrgrootx1.h>
 
 // polinema server https
-#define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firware/firmware.zip"
+#define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firmware/firmware.zip"
 // polinema server
 // #define OTA_URL "http://103.172.249.254:8000/api/v1/firmware/firmware.zip"
 // cloudflared server
@@ -110,7 +110,8 @@ static bool download_zip_to_spiffs(const char *url)
         return false;
     }
 
-    const int buf_size = 1024;
+    const int buf_size = 8192;
+    const int PROGRESS_STEP = 5; // log every 5%
     uint8_t *buffer = malloc(buf_size);
     if (!buffer)
     {
@@ -122,6 +123,9 @@ static bool download_zip_to_spiffs(const char *url)
 
     ESP_LOGI(TAG, "[HTTP] Start download to %s", UPDATE_ZIP_PATH);
     int total_read = 0;
+    int last_percent = -1;
+    int last_logged = 0;
+
     while (1)
     {
         int read_len = esp_http_client_read(client, (char *)buffer, buf_size);
@@ -151,6 +155,26 @@ static bool download_zip_to_spiffs(const char *url)
         }
         total_read += read_len;
         esp_task_wdt_reset();
+
+        // Logger progress
+        if (content_length > 0)
+        {
+            int percent = (total_read * 100) / content_length;
+            if (percent != last_percent && percent % PROGRESS_STEP == 0)
+            {
+                ESP_LOGI(TAG, "[HTTP] Download progress: %d%% (%d/%d bytes)", percent, total_read, content_length);
+                last_percent = percent;
+            }
+        }
+        else
+        {
+            // Fallback log per 64KB
+            if (total_read - last_logged >= 65536)
+            {
+                ESP_LOGI(TAG, "[HTTP] Downloaded %d KB", total_read / 1024);
+                last_logged = total_read;
+            }
+        }
     }
 
     free(buffer);
