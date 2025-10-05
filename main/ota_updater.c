@@ -16,7 +16,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <isrgrootx1.h>
+#include "certs/isrgrootx1.h"
 
 // polinema server https
 #define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firmware/firmware.zip"
