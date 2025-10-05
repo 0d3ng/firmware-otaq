@@ -6,6 +6,7 @@
 #include "mqtt_app.h"
 #include "ota_updater.h"
 #include "sensor_task.h"
+#include "ntp.h"
 
 static const char *TAG = "main_app";
 
@@ -25,6 +26,10 @@ void app_main(void)
     // WiFi
     ESP_LOGI(TAG, "Connecting to WiFi...");
     wifi_init_sta();
+
+    // NTP
+    ESP_LOGI(TAG, "Initializing NTP...");
+    initialize_sntp();
 
     // MQTT
     ESP_LOGI(TAG, "Starting MQTT...");
