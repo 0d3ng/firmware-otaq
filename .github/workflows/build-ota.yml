@@ -1,0 +1,122 @@
+name: ESP-IDF Build & Secure OTA (PyNaCl)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - development
+    types: [closed]
+
+jobs:
+  build-ota:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    environment: firmware env
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y zip curl
+
+      - name: Install Python dependencies
+        run: pip install pynacl
+
+      - name: Setup ESP-IDF
+        run: |
+          git clone --depth 1 --branch v5.5.1 https://github.com/espressif/esp-idf.git $HOME/esp-idf
+          cd $HOME/esp-idf
+          ./install.sh esp32
+
+      - name: Build firmware
+        run: |
+          . $HOME/esp-idf/export.sh
+          idf.py set-target esp32
+          idf.py build
+
+      - name: Show stderr log if build fails
+        if: failure()
+        run: cat build/log/idf_py_stderr_output_*
+
+      - name: Show stdout log if build fails
+        if: failure()
+        run: cat build/log/idf_py_stdout_output_*
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp-idf-build-logs
+          path: build/log/
+
+      - name: Set VERSION string
+        id: version
+        run: |
+          COMMIT=$(git rev-parse --short HEAD)
+          TIME=$(date -u +"%Y%m%dT%H%M")
+          echo "VERSION=${COMMIT}-${TIME}-build${{ github.run_number }}" >> $GITHUB_ENV
+
+      - name: Create manifest.json & package using PyNaCl
+        env:
+          ED25519_PRIVATE_KEY_HEX: ${{ secrets.ED25519_PRIVATE_KEY_HEX }}
+          VERSION: ${{ env.VERSION }} # or any other versioning scheme
+        run: |
+          python3 - <<'EOF'
+          import json, hashlib
+          from nacl.signing import SigningKey
+          from nacl.encoding import HexEncoder
+          import os
+          print("nacl version:", SigningKey.__module__)
+
+          fw_file = "build/firmware-otaq.bin"
+          with open(fw_file, "rb") as f:
+              data = f.read()
+          digest = hashlib.sha256(data).digest()
+          print(f"Firmware {fw_file} size={len(data)} sha256={digest.hex()}")
+
+          # Load private key from GitHub Secrets (hex string)
+          private_key_hex = os.environ.get("ED25519_PRIVATE_KEY_HEX","").strip()
+          print(f"Raw key repr: {repr(private_key_hex)}")
+          print(f"Length after strip: {len(private_key_hex)}")
+
+          if len(private_key_hex) != 64:
+              raise ValueError("Invalid ED25519 private key length")
+          print(f"Private key hex: {private_key_hex} len={len(private_key_hex)}")
+
+          seed = bytes.fromhex(private_key_hex)
+          print(f"Using private key: {private_key_hex} len={len(seed)}")
+          sk = SigningKey(seed)
+          signature = sk.sign(digest).signature.hex()
+
+          metadata = {
+              "version": os.environ.get("VERSION", "1.0.0"),
+              "hash": digest.hex(),
+              "signature": signature
+          }
+          print(f"Manifest: {metadata}")
+          with open("manifest.json", "w") as f:
+              json.dump(metadata, f, indent=2)
+          EOF
+
+          zip -j firmware.zip build/firmware-otaq.bin manifest.json
+
+      - name: Upload package via API
+        run: |
+          STATUS=$(curl -s -o response.txt -w "%{http_code}" \
+            -X POST "${{ secrets.API_URL }}/firmware/upload" \
+            -H "Authorization: Bearer ${{ secrets.API_TOKEN }}" \
+            -F "file=@firmware.zip")
+
+          echo "Response code: $STATUS"
+          if [ "$STATUS" -ne 200 ]; then
+            echo "❌ Upload failed with status $STATUS"
+            cat response.txt
+            exit 1
+          fi
+          echo "✅ Upload successful"
