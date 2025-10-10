@@ -32,6 +32,9 @@ void sensor_task(void *pvParameter)
         struct tm timeinfo;
         time(&now);
         localtime_r(&now, &timeinfo);
+        // create timestamp ISO 8601
+        char timestamp[32];
+        snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02dT%02d:%02d:%02d", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 
         TickType_t T0 = xTaskGetTickCount();
         // Second driver call
@@ -56,24 +59,12 @@ void sensor_task(void *pvParameter)
 
         // create JSON payload
         char payload[256];
-        snprintf(payload, sizeof(payload),
-                 "{\"temperature\":%.2f,\"humidity\":%.2f,\"voltage\":%.3f,\"timestamp\":\"%04d-%02d-%02dT%02d:%02d:%02d\"}",
-                 temperature_c, humidity_rh, voltage, timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
-                 timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        snprintf(payload, sizeof(payload), "{\"temperature\":%.2f,\"humidity\":%.2f,\"voltage\":%.3f,\"timestamp\":\"%s\"}", temperature_c, humidity_rh, voltage, timestamp);
         ESP_LOGI(TAG, "Payload: %s", payload);
         // publish via MQTT
         mqtt_publish("device/002/sensor", payload);
 
-        ESP_LOGI(TAG, "[%04d-%02d-%02d %02d:%02d:%02d] Published Temp: %.2f°C | Humi: %.2f%% | Volt: %.3fV",
-                 timeinfo.tm_year + 1900,
-                 timeinfo.tm_mon + 1,
-                 timeinfo.tm_mday,
-                 timeinfo.tm_hour,
-                 timeinfo.tm_min,
-                 timeinfo.tm_sec,
-                 temperature_c,
-                 humidity_rh,
-                 voltage);
+        ESP_LOGI(TAG, "[%s] Published Temp: %.2f°C | Humi: %.2f%% | Volt: %.3fV", timestamp, temperature_c, humidity_rh, voltage);
 
         vTaskDelay(pdMS_TO_TICKS(5000));
     }

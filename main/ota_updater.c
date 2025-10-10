@@ -17,6 +17,9 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "certs/isrgrootx1.h"
+#include "esp_heap_caps.h"
+#include "esp_timer.h"
+#include "mqtt_app.h"
 
 // polinema server https
 #define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firmware/firmware.zip"
@@ -38,6 +41,76 @@
 static const uint8_t PUBLIC_KEY[32] = {0x84, 0xCE, 0x80, 0x59, 0x6A, 0x49, 0xF7, 0xA8, 0x34, 0x2F, 0x5D, 0xB1, 0x40, 0x4E, 0x26, 0x12, 0xF1, 0x58, 0xA5, 0xD7, 0x4C, 0x95, 0xE0, 0x5D, 0x62, 0xD2, 0xE2, 0x17, 0x60, 0x37, 0x80, 0x23};
 
 static volatile bool ota_flag = false;
+static uint64_t stage_start_time = 0;
+
+// measure time spent in each stage
+void ota_monitor_start_stage(void)
+{
+    stage_start_time = esp_timer_get_time();
+}
+
+// measure time, heap, CPU usage per task in stage
+void ota_monitor_end_stage(const char *stage_name)
+{
+    // time log
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    uint64_t elapsed_us = esp_timer_get_time() - stage_start_time;
+
+    // Heap info
+    size_t free_heap = esp_get_free_heap_size();
+    size_t min_free_heap = esp_get_minimum_free_heap_size();
+
+    // CPU usage per task
+    UBaseType_t numTasks = uxTaskGetNumberOfTasks();
+    TaskStatus_t *taskStatusArray = malloc(numTasks * sizeof(TaskStatus_t));
+    uint32_t totalRunTime = 0;
+    if (!taskStatusArray)
+        return;
+
+    numTasks = uxTaskGetSystemState(taskStatusArray, numTasks, &totalRunTime);
+
+    // create timestamp ISO 8601
+    char timestamp[32];
+    snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02dT%02d:%02d:%02d",
+             timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
+    // Publish global stage info
+    char msg[512];
+    snprintf(msg, sizeof(msg),
+             "{\"stage\":\"%s\",\"elapsed_ms\":%llu,\"free_heap\":%u,\"min_free_heap\":%u,\"timestamp\":\"%s\"}",
+             stage_name, (unsigned long long)(elapsed_us / 1000),
+             (unsigned int)free_heap, (unsigned int)min_free_heap, timestamp);
+    ESP_LOGI(TAG, "[%s] Stage %s completed in %llu ms, free_heap=%u, min_free_heap=%u", timestamp,
+             stage_name, (unsigned long long)(elapsed_us / 1000), (unsigned int)free_heap, (unsigned int)min_free_heap);
+    mqtt_publish("ota/metrics", msg);
+
+    // Publish CPU usage per task
+    for (int i = 0; i < numTasks; i++)
+    {
+        time(&now);
+        localtime_r(&now, &timeinfo);
+        snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02dT%02d:%02d:%02d",
+                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                 timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        float cpu_percent = 0.0f;
+        if (totalRunTime > 0)
+            cpu_percent = (float)taskStatusArray[i].ulRunTimeCounter / totalRunTime * 100.0f;
+
+        snprintf(msg, sizeof(msg),
+                 "{\"stage\":\"%s\",\"task\":\"%s\",\"cpu_percent\":%.2f,\"timestamp\":\"%s\"}",
+                 stage_name, taskStatusArray[i].pcTaskName, cpu_percent);
+        ESP_LOGI(TAG, "[%s] Task %s CPU usage: %.2f%%", timestamp,
+                 taskStatusArray[i].pcTaskName, cpu_percent);
+        mqtt_publish("ota/cpu", msg);
+    }
+
+    free(taskStatusArray);
+}
+
 void ota_trigger() { ota_flag = true; }
 bool ota_triggered(void)
 {
@@ -302,6 +375,7 @@ static size_t mz_to_ota_callback(void *pOpaque, mz_uint64 file_ofs, const void *
 */
 static bool extract_zip_and_flash_ota(const char *zip_path)
 {
+    ota_monitor_start_stage();
     mz_zip_archive zip;
     memset(&zip, 0, sizeof(zip));
 
@@ -369,8 +443,10 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     }
     ESP_LOGI(TAG, "[OTA] expected hash: %s", expected_hash_hex);
     ESP_LOGI(TAG, "[OTA] signature hex: %s", signature_hex);
+    ota_monitor_end_stage("parse_manifest");
 
     // 2) locate firmware entry
+    ota_monitor_start_stage();
     int fw_index = mz_zip_reader_locate_file(&zip, FIRMWARE_ENTRY_NAME, NULL, 0);
     if (fw_index < 0)
     {
@@ -444,6 +520,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
 
     // close zip
     mz_zip_reader_end(&zip);
+    ota_monitor_end_stage("extract_and_stream_ota");
     ESP_LOGI(TAG, "[ZIP] extraction finished, total written %u bytes", (unsigned)cb_state.total_written);
 
     // if callback flagged error -> abort OTA
@@ -456,6 +533,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     }
 
     // 5) compare hash (calc_hash) with expected_hash_hex
+    ota_monitor_start_stage();
     char calc_hash_hex[65];
     for (int i = 0; i < 32; ++i)
         sprintf(calc_hash_hex + i * 2, "%02x", calc_hash[i]);
@@ -470,8 +548,10 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
         free(manifest);
         return false;
     }
+    ota_monitor_end_stage("verify_hash");
 
     // 6) verify signature: signature is hex in manifest -> bytes
+    ota_monitor_start_stage();
     uint8_t signature[SIG_LEN];
     if (!hexstr_to_bytes(signature_hex, signature, SIG_LEN))
     {
@@ -480,7 +560,10 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
         free(manifest);
         return false;
     }
+    ota_monitor_end_stage("hexstr_to_bytes");
+
     // verify ed25519 over the 32-byte hash
+    ota_monitor_start_stage();
     if (crypto_ed25519_check(signature, PUBLIC_KEY, calc_hash, 32) != 0)
     {
         ESP_LOGE(TAG, "[OTA] Signature verification FAILED");
@@ -488,10 +571,11 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
         free(manifest);
         return false;
     }
-
+    ota_monitor_end_stage("verify_signature");
     ESP_LOGI(TAG, "[OTA] Hash and signature verified OK");
 
     // 7) finalize OTA: esp_ota_end already necessary, then set boot partition
+    ota_monitor_start_stage();
     if (esp_ota_end(ota_handle) != ESP_OK)
     {
         ESP_LOGE(TAG, "[OTA] esp_ota_end failed");
@@ -504,7 +588,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
         free(manifest);
         return false;
     }
-
+    ota_monitor_end_stage("ota_set_boot_partition");
     ESP_LOGI(TAG, "[OTA] OTA committed. Rebooting in 500 ms...");
     free(manifest);
     // optionally remove update.zip from SPIFFS to free space
@@ -538,11 +622,13 @@ void ota_task(void *pvParameter)
 
         // Download zip to SPIFFS
         ESP_LOGI(TAG, "[OTA] Downloading zip from %s ...", OTA_URL);
+        ota_monitor_start_stage();
         if (!download_zip_to_spiffs(OTA_URL))
         {
             ESP_LOGE(TAG, "[OTA] download_zip_to_spiffs failed");
             continue;
         }
+        ota_monitor_end_stage("download_zip_to_spiffs");
 
         // Extract manifest & stream firmware to OTA
         ESP_LOGI(TAG, "[OTA] Extracting and flashing firmware...");
