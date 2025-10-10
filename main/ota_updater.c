@@ -73,7 +73,7 @@ void ota_monitor_end_stage(const char *stage_name)
     numTasks = uxTaskGetSystemState(taskStatusArray, numTasks, &totalRunTime);
 
     // create timestamp ISO 8601
-    char timestamp[32];
+    char timestamp[64];
     snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02dT%02d:%02d:%02d",
              timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
              timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
@@ -102,7 +102,7 @@ void ota_monitor_end_stage(const char *stage_name)
 
         snprintf(msg, sizeof(msg),
                  "{\"stage\":\"%s\",\"task\":\"%s\",\"cpu_percent\":%.2f,\"timestamp\":\"%s\"}",
-                 stage_name, taskStatusArray[i].pcTaskName, cpu_percent);
+                 stage_name, taskStatusArray[i].pcTaskName, cpu_percent, timestamp);
         ESP_LOGI(TAG, "[%s] Task %s CPU usage: %.2f%%", timestamp,
                  taskStatusArray[i].pcTaskName, cpu_percent);
         mqtt_publish("ota/cpu", msg);
