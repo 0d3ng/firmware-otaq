@@ -34,22 +34,12 @@ jobs:
           cd $HOME/esp-idf
           ./install.sh esp32
 
-      - name: Force rebuild FreeRTOS
+      - name: Build firmware
         run: |
           . $HOME/esp-idf/export.sh
           idf.py set-target esp32
           idf.py fullclean
-          rm -rf $HOME/esp-idf/components/freertos/CMakeCache.txt || true
-          idf.py reconfigure
-
-      - name: Build firmware
-        run: |
-          . $HOME/esp-idf/export.sh
           idf.py build
-
-      - name: Verify symbol
-        run: |
-          xtensa-esp32-elf-nm build/*.elf | grep uxTaskGetSystemState || echo "Not found!"
 
       - name: Upload build logs
         if: failure()
