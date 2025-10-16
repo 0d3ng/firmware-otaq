@@ -54,10 +54,6 @@ jobs:
           grep FREERTOS_USE_TRACE_FACILITY build/config/sdkconfig.h || echo "TRACE_FACILITY not found"
           grep FREERTOS_USE_STATS_FORMATTING_FUNCTIONS build/config/sdkconfig.h || echo "STATS_FUNCTIONS not found"
 
-      - name: Check if uxTaskGetSystemState compiled
-        run: |
-          grep -R "uxTaskGetSystemState" build/esp-idf/freertos -a || echo "Symbol not found in FreeRTOS build"
-
       - name: Upload build logs
         if: failure()
         uses: actions/upload-artifact@v4
