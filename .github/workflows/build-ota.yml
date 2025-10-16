@@ -41,20 +41,17 @@ jobs:
           echo "CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y" >> sdkconfig
           echo "CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER=y" >> sdkconfig
 
+      - name: Check sdkconfig
+        run: grep FREERTOS sdkconfig | grep TRACE || true
+
       - name: Build firmware
+        env:
+          SDKCONFIG: ${{ github.workspace }}/sdkconfig
         run: |
           . $HOME/esp-idf/export.sh
           idf.py set-target esp32
           idf.py fullclean
           idf.py build
-
-      - name: Show stderr log if build fails
-        if: failure()
-        run: cat build/log/idf_py_stderr_output_*
-
-      - name: Show stdout log if build fails
-        if: failure()
-        run: cat build/log/idf_py_stdout_output_*
 
       - name: Upload build logs
         if: failure()
