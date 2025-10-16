@@ -6,3 +6,9 @@ target_include_directories(${COMPONENT_TARGET} PRIVATE
     "$ENV{IDF_PATH}/components/spiffs/include"
     "$ENV{IDF_PATH}/components/lwip/include"
 )
+
+add_compile_definitions(
+    CONFIG_FREERTOS_USE_TRACE_FACILITY=1
+    CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS=1
+)
+

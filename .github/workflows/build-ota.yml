@@ -37,9 +37,26 @@ jobs:
       - name: Build firmware
         run: |
           . $HOME/esp-idf/export.sh
-          idf.py set-target esp32
+
+          echo "=== Step 1: Show FREERTOS configs in sdkconfig ==="
+          grep FREERTOS sdkconfig || echo "No FREERTOS config found"
+
+          echo "=== Step 2: Clean build to ensure FreeRTOS rebuilds ==="
           idf.py fullclean
+
+          echo "=== Step 3: Set target ==="
+          idf.py set-target esp32
+
+          echo "=== Step 4: Build firmware ==="
           idf.py build
+
+          echo "=== Step 5: Check sdkconfig.h after build ==="
+          grep FREERTOS_USE_TRACE_FACILITY build/config/sdkconfig.h || echo "TRACE_FACILITY not found"
+          grep FREERTOS_USE_STATS_FORMATTING_FUNCTIONS build/config/sdkconfig.h || echo "STATS_FUNCTIONS not found"
+
+      - name: Check if uxTaskGetSystemState compiled
+        run: |
+          grep -R "uxTaskGetSystemState" build/esp-idf/freertos -a || echo "Symbol not found in FreeRTOS build"
 
       - name: Upload build logs
         if: failure()
