@@ -34,24 +34,18 @@ jobs:
           cd $HOME/esp-idf
           ./install.sh esp32
 
-      - name: Ensure FreeRTOS trace enabled
-        run: |
-          echo "CONFIG_FREERTOS_USE_TRACE_FACILITY=y" >> sdkconfig
-          echo "CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS=y" >> sdkconfig
-          echo "CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y" >> sdkconfig
-          echo "CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER=y" >> sdkconfig
-
-      - name: Check sdkconfig
-        run: grep FREERTOS sdkconfig | grep TRACE || true
-
       - name: Build firmware
         env:
-          SDKCONFIG: ${{ github.workspace }}/sdkconfig
+          CFLAGS: "-DCONFIG_FREERTOS_USE_TRACE_FACILITY=1 -DCONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS=1"
         run: |
           . $HOME/esp-idf/export.sh
           idf.py set-target esp32
           idf.py fullclean
           idf.py build
+
+      - name: Verify symbol
+        run: |
+          xtensa-esp32-elf-nm build/*.elf | grep uxTaskGetSystemState || echo "Not found!"
 
       - name: Upload build logs
         if: failure()
