@@ -739,12 +739,16 @@ void ota_task(void *pvParameter)
 
         ESP_LOGI(TAG, "[OTA] Triggered");
 
+        // Pause sensor task to reduce CPU load during OTA
+        ota_pause_sensors();
+
         // Download zip to SPIFFS
         ESP_LOGI(TAG, "[OTA] Downloading zip from %s ...", OTA_URL);
         ota_monitor_start_stage();
         if (!download_zip_to_spiffs(OTA_URL))
         {
             ESP_LOGE(TAG, "[OTA] download_zip_to_spiffs failed");
+            ota_resume_sensors();
             continue;
         }
         ota_monitor_end_stage("download_zip_to_spiffs");
@@ -756,8 +760,12 @@ void ota_task(void *pvParameter)
             ESP_LOGE(TAG, "[OTA] extract_zip_and_flash_ota failed");
             // optionally delete update.zip to retry next time
             // remove(UPDATE_ZIP_PATH);
+            ota_resume_sensors();
             continue;
         }
+
+        // Resume sensors if OTA flow returns (normally device will reboot on success)
+        ota_resume_sensors();
 
         // normally won't reach here because extract_zip_and_flash_ota reboots on success
         vTaskDelay(pdMS_TO_TICKS(1000));

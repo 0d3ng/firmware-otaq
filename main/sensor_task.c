@@ -7,6 +7,7 @@
 #include <time.h>
 #include "DHT22.h"
 #include "battery_voltage.h"
+#include "ota_control.h"
 
 #define PIN_GPIO_DHT22 4
 
@@ -25,8 +26,25 @@ void sensor_task(void *pvParameter)
     adc_cali_handle_t cali_handle;
 
     battery_adc_init(&adc_handle, &cali_handle, ADC_CHANNEL);
+
+    EventGroupHandle_t eg = ota_control_get_event_group();
+    const EventBits_t PAUSE_BIT = (1 << 0);
+
     while (1)
     {
+        // If OTA requested pause, wait until cleared
+        if (eg)
+        {
+            EventBits_t bits = xEventGroupWaitBits(eg, PAUSE_BIT, pdFALSE, pdFALSE, pdMS_TO_TICKS(1000));
+            if (bits & PAUSE_BIT)
+            {
+                // paused: block until resume
+                ESP_LOGI(TAG, "Sensor task paused for OTA");
+                xEventGroupWaitBits(eg, PAUSE_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+                ESP_LOGI(TAG, "Sensor task resumed after OTA");
+            }
+        }
+
         // time log
         time_t now;
         struct tm timeinfo;
