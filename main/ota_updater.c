@@ -20,6 +20,7 @@
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "mqtt_app.h"
+#include "ota_control.h"
 
 // polinema server https
 #define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firmware/firmware.zip"
