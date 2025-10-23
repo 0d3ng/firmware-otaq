@@ -12,6 +12,7 @@ static const char *TAG = "main_app";
 
 void app_main(void)
 {
+    printf("Running firmware version: %s\n", FIRMWARE_VERSION);
     ESP_LOGI(TAG, "Starting system...");
     // NVS init
     esp_err_t ret = nvs_flash_init();

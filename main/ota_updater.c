@@ -257,9 +257,10 @@ static bool download_zip_to_spiffs(const char *url)
 }
 
 /* ---------------- cJSON manifest parser ----------------
-   Expects JSON keys "hash" and "signature".
+   Expects JSON keys "hash", "signature", and "version".
 */
-static bool parse_manifest(const char *manifest_str, char *hash_out, size_t hash_len, char *sig_out, size_t sig_len)
+static bool parse_manifest(const char *manifest_str, char *hash_out, size_t hash_len,
+                           char *sig_out, size_t sig_len, char *version_out, size_t version_len)
 {
     cJSON *root = cJSON_Parse(manifest_str);
     if (!root)
@@ -270,15 +271,18 @@ static bool parse_manifest(const char *manifest_str, char *hash_out, size_t hash
 
     const cJSON *hash_item = cJSON_GetObjectItemCaseSensitive(root, "hash");
     const cJSON *sig_item = cJSON_GetObjectItemCaseSensitive(root, "signature");
+    const cJSON *version_item = cJSON_GetObjectItemCaseSensitive(root, "version");
 
-    if (!cJSON_IsString(hash_item) || !cJSON_IsString(sig_item))
+    if (!cJSON_IsString(hash_item) || !cJSON_IsString(sig_item) || !cJSON_IsString(version_item))
     {
         ESP_LOGE(TAG, "Manifest fields missing or not strings");
         cJSON_Delete(root);
         return false;
     }
 
-    if (strlen(hash_item->valuestring) >= hash_len || strlen(sig_item->valuestring) >= sig_len)
+    if (strlen(hash_item->valuestring) >= hash_len ||
+        strlen(sig_item->valuestring) >= sig_len ||
+        strlen(version_item->valuestring) >= version_len)
     {
         ESP_LOGE(TAG, "Manifest values too long for buffers");
         cJSON_Delete(root);
@@ -287,9 +291,99 @@ static bool parse_manifest(const char *manifest_str, char *hash_out, size_t hash
 
     strncpy(hash_out, hash_item->valuestring, hash_len);
     strncpy(sig_out, sig_item->valuestring, sig_len);
+    strncpy(version_out, version_item->valuestring, version_len);
 
     cJSON_Delete(root);
     return true;
+}
+
+/* ---------------- helper: parse version string ----------------
+   Expected formats:
+   - "<hash>-YYYYMMDDTHHMM-local"
+   - "<hash>-YYYYMMDDTHHMM-buildNN"
+   We extract timestamp and optional build number. Returns true on success.
+*/
+static bool parse_version_components(const char *ver, char *ts_out, size_t ts_len, int *build_num_out)
+{
+    if (!ver || !ts_out || !build_num_out)
+        return false;
+    *build_num_out = -1;
+
+    // find first '-' and second '-'
+    const char *p1 = strchr(ver, '-');
+    if (!p1)
+        return false;
+    const char *p2 = strchr(p1 + 1, '-');
+    if (!p2)
+        return false;
+
+    size_t tlen = p2 - (p1 + 1);
+    if (tlen + 1 > ts_len)
+        return false;
+    memcpy(ts_out, p1 + 1, tlen);
+    ts_out[tlen] = '\0';
+
+    // suffix after second '-'
+    const char *suf = p2 + 1;
+    if (strncmp(suf, "build", 5) == 0)
+    {
+        // parse number after 'build'
+        const char *num = suf + 5;
+        if (*num == '\0')
+            return true; // no number, treat as no build
+        char *endptr;
+        long v = strtol(num, &endptr, 10);
+        if (endptr != num && v >= 0)
+            *build_num_out = (int)v;
+    }
+    // if suffix is 'local' or others, leave build_num_out = -1
+    return true;
+}
+
+/* ---------------- helper: compare versions ----------------
+   Returns: 1 if new_ver is newer than cur_ver
+            0 if equal
+           -1 if new_ver is older
+   Rules:
+   - Compare timestamps lexicographically (YYYYMMDDTHHMM).
+   - If timestamps equal and both have build numbers, compare them numerically.
+   - If timestamps equal and new has build while cur doesn't => new is newer.
+   - If timestamps equal and cur has build while new doesn't => new is older.
+*/
+static int compare_firmware_versions(const char *cur_ver, const char *new_ver)
+{
+    char cur_ts[32] = {0};
+    char new_ts[32] = {0};
+    int cur_build = -1;
+    int new_build = -1;
+
+    if (!parse_version_components(cur_ver, cur_ts, sizeof(cur_ts), &cur_build))
+        return 0; // can't parse -> treat as equal
+    if (!parse_version_components(new_ver, new_ts, sizeof(new_ts), &new_build))
+        return 0;
+
+    int ts_cmp = strcmp(new_ts, cur_ts);
+    if (ts_cmp > 0)
+        return 1;
+    if (ts_cmp < 0)
+        return -1;
+
+    // timestamps equal
+    if (new_build != -1 && cur_build != -1)
+    {
+        if (new_build > cur_build)
+            return 1;
+        if (new_build < cur_build)
+            return -1;
+        return 0;
+    }
+    if (new_build != -1 && cur_build == -1)
+        return 1; // build vs local -> build considered newer
+    if (new_build == -1 && cur_build != -1)
+        return -1; // new is local and cur has build -> new older
+
+    // neither has build -> equal
+    return 0;
 }
 
 /* ---------------- helper: hex -> bytes ---------------- */
@@ -434,7 +528,10 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     // parse manifest
     char expected_hash_hex[65];
     char signature_hex[129];
-    if (!parse_manifest(manifest, expected_hash_hex, sizeof(expected_hash_hex), signature_hex, sizeof(signature_hex)))
+    char new_version[64];
+    if (!parse_manifest(manifest, expected_hash_hex, sizeof(expected_hash_hex),
+                        signature_hex, sizeof(signature_hex),
+                        new_version, sizeof(new_version)))
     {
         ESP_LOGE(TAG, "[OTA] parse manifest failed");
         free(manifest);
@@ -443,6 +540,28 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     }
     ESP_LOGI(TAG, "[OTA] expected hash: %s", expected_hash_hex);
     ESP_LOGI(TAG, "[OTA] signature hex: %s", signature_hex);
+    ESP_LOGI(TAG, "[OTA] new version: %s", new_version);
+    ESP_LOGI(TAG, "[OTA] current version: %s", FIRMWARE_VERSION);
+
+    // Compare versions using compare_firmware_versions helper
+    ota_monitor_start_stage();
+    int cmp = compare_firmware_versions(FIRMWARE_VERSION, new_version);
+    if (cmp > 0)
+    {
+        ESP_LOGI(TAG, "[OTA] Current firmware is newer than candidate. Skipping update.");
+        free(manifest);
+        mz_zip_reader_end(&zip);
+        return false;
+    }
+    else if (cmp == 0)
+    {
+        ESP_LOGI(TAG, "[OTA] Current firmware version equals candidate. Skipping update.");
+        free(manifest);
+        mz_zip_reader_end(&zip);
+        return false;
+    }
+    ESP_LOGI(TAG, "[OTA] Candidate firmware is newer. Proceeding with update.");
+    ota_monitor_end_stage("version_check");
     ota_monitor_end_stage("parse_manifest");
 
     // 2) locate firmware entry
