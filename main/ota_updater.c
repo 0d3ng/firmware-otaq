@@ -54,6 +54,9 @@ void ota_monitor_start_stage(void)
 void ota_monitor_end_stage(const char *stage_name)
 {
     // time log
+    /* Reset WDT early in this monitoring function to avoid WDT trips while
+       collecting task stats / publishing metrics. */
+    esp_task_wdt_reset();
     time_t now;
     struct tm timeinfo;
     time(&now);
@@ -106,6 +109,8 @@ void ota_monitor_end_stage(const char *stage_name)
                  stage_name, taskStatusArray[i].pcTaskName, cpu_percent, timestamp);
         ESP_LOGI(TAG, "[%s] Task %s CPU usage: %.2f%%", timestamp,
                  taskStatusArray[i].pcTaskName, cpu_percent);
+        /* Reset WDT before publishing in case mqtt_publish blocks */
+        esp_task_wdt_reset();
         mqtt_publish("ota/cpu", msg);
     }
 
@@ -364,18 +369,16 @@ static int compare_firmware_versions(const char *cur_ver, const char *new_ver)
         return 0;
 
     int ts_cmp = strcmp(new_ts, cur_ts);
+    /* If current build is a local build and the new version has a CI build
+       identifier, prefer the CI build regardless of timestamps. This allows
+       developer local images to be replaced by official build artifacts. */
+    if (strstr(cur_ver, "-local") != NULL && new_build != -1)
+        return 1;
+
     if (ts_cmp > 0)
         return 1;
     if (ts_cmp < 0)
         return -1;
-
-    // Check if current version is local build
-    const char *cur_suffix = strstr(cur_ver, "-local");
-    if (cur_suffix != NULL && new_build != -1)
-    {
-        // If current is local and new has build number, always update
-        return 1;
-    }
 
     // timestamps equal
     if (new_build != -1 && cur_build != -1)
@@ -387,11 +390,11 @@ static int compare_firmware_versions(const char *cur_ver, const char *new_ver)
         return 0;
     }
 
-    // If neither has build number, compare normally
+    // If neither has build number -> equal
     if (new_build == -1 && cur_build == -1)
         return 0;
 
-    // If only one has build number
+    // If only one has build number, prefer the one with build number
     if (new_build != -1)
         return 1; // new has build number, current doesn't
     return -1;    // current has build number, new doesn't
@@ -484,6 +487,9 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     mz_zip_archive zip;
     memset(&zip, 0, sizeof(zip));
 
+    /* Reset WDT before starting zip operations (may block on I/O) */
+    esp_task_wdt_reset();
+
     if (!mz_zip_reader_init_file(&zip, zip_path, 0))
     {
         ESP_LOGE(TAG, "[ZIP] mz_zip_reader_init_file failed for %s", zip_path);
@@ -515,6 +521,8 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
         mz_zip_reader_end(&zip);
         return false;
     }
+    /* Reset WDT before extracting manifest to heap (may allocate/copy several KB) */
+    esp_task_wdt_reset();
     void *manifest_heap = mz_zip_reader_extract_to_heap(&zip, manifest_index, NULL, 0);
     if (!manifest_heap)
     {
@@ -613,6 +621,8 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
         return false;
     }
     esp_ota_handle_t ota_handle;
+    /* Reset WDT before beginning OTA write (flash operations may block) */
+    esp_task_wdt_reset();
     if (esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &ota_handle) != ESP_OK)
     {
         ESP_LOGE(TAG, "[OTA] esp_ota_begin failed");
