@@ -369,6 +369,14 @@ static int compare_firmware_versions(const char *cur_ver, const char *new_ver)
     if (ts_cmp < 0)
         return -1;
 
+    // Check if current version is local build
+    const char *cur_suffix = strstr(cur_ver, "-local");
+    if (cur_suffix != NULL && new_build != -1)
+    {
+        // If current is local and new has build number, always update
+        return 1;
+    }
+
     // timestamps equal
     if (new_build != -1 && cur_build != -1)
     {
@@ -378,13 +386,15 @@ static int compare_firmware_versions(const char *cur_ver, const char *new_ver)
             return -1;
         return 0;
     }
-    if (new_build != -1 && cur_build == -1)
-        return 1; // build vs local -> build considered newer
-    if (new_build == -1 && cur_build != -1)
-        return -1; // new is local and cur has build -> new older
 
-    // neither has build -> equal
-    return 0;
+    // If neither has build number, compare normally
+    if (new_build == -1 && cur_build == -1)
+        return 0;
+
+    // If only one has build number
+    if (new_build != -1)
+        return 1; // new has build number, current doesn't
+    return -1;    // current has build number, new doesn't
 }
 
 /* ---------------- helper: hex -> bytes ---------------- */
@@ -746,16 +756,19 @@ void ota_task(void *pvParameter)
         // Download zip to SPIFFS
         ESP_LOGI(TAG, "[OTA] Downloading zip from %s ...", OTA_URL);
         ota_monitor_start_stage();
+        esp_task_wdt_reset(); // Reset WDT before starting download
         if (!download_zip_to_spiffs(OTA_URL))
         {
             ESP_LOGE(TAG, "[OTA] download_zip_to_spiffs failed");
             ota_resume_sensors();
             continue;
         }
+        esp_task_wdt_reset(); // Reset WDT after download
         ota_monitor_end_stage("download_zip_to_spiffs");
 
         // Extract manifest & stream firmware to OTA
         ESP_LOGI(TAG, "[OTA] Extracting and flashing firmware...");
+        esp_task_wdt_reset(); // Reset WDT before extraction
         if (!extract_zip_and_flash_ota(UPDATE_ZIP_PATH))
         {
             ESP_LOGE(TAG, "[OTA] extract_zip_and_flash_ota failed");
