@@ -73,7 +73,7 @@ void sensor_task(void *pvParameter)
 
         // read battery voltage
         float voltage = battery_read_voltage(adc_handle, cali_handle, ADC_CHANNEL, 50);
-        ESP_LOGI(TAG, "Battery voltage: %.3f V", voltage);
+        // ESP_LOGI(TAG, "Battery voltage: %.3f V", voltage);
 
         // create JSON payload
         char payload[256];

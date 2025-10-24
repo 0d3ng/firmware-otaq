@@ -547,7 +547,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     // Compare versions using compare_firmware_versions helper
     ota_monitor_start_stage();
     int cmp = compare_firmware_versions(FIRMWARE_VERSION, new_version);
-    if (cmp > 0)
+    if (cmp < 0)
     {
         ESP_LOGI(TAG, "[OTA] Current firmware is newer than candidate. Skipping update.");
         free(manifest);

@@ -43,7 +43,7 @@ float battery_read_voltage(adc_oneshot_unit_handle_t adc_handle,
 
     int vout_mv;
     adc_cali_raw_to_voltage(cali_handle, adc_avg, &vout_mv); // langsung pakai handle
-    ESP_LOGI("battery_voltage", "ADC raw avg: %d, Voltage: %d mV", adc_avg, vout_mv);
+    // ESP_LOGI("battery_voltage", "ADC raw avg: %d, Voltage: %d mV", adc_avg, vout_mv);
     float vout_v = vout_mv / 1000.0f;
     float vin_v = vout_v * ((R1_OHM + R2_OHM) / R2_OHM);
     return vin_v;
