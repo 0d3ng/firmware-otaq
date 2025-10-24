@@ -39,7 +39,8 @@ jobs:
           GIT_HASH=$(git rev-parse --short HEAD)
           BUILD_DATE=$(date "+%Y%m%dT%H%M")
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
-          echo "FIRMWARE_VERSION=${GIT_HASH}-${BUILD_DATE}-build${BUILD_NUMBER}" >> $GITHUB_ENV
+          FIRMWARE_VERSION="${GIT_HASH}-${BUILD_DATE}-build${BUILD_NUMBER}"
+          echo "FIRMWARE_VERSION=${FIRMWARE_VERSION}" >> $GITHUB_ENV
           echo "Firmware version: ${FIRMWARE_VERSION}"
 
       - name: Build firmware
