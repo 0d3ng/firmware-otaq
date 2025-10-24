@@ -40,7 +40,10 @@ void sensor_task(void *pvParameter)
             {
                 // paused: block until PAUSE_BIT is cleared
                 ESP_LOGI(TAG, "Sensor task paused for OTA");
-                xEventGroupWaitBits(eg, PAUSE_BIT, pdTRUE, pdTRUE, portMAX_DELAY); // Wait for bit to be cleared
+                while (xEventGroupGetBits(eg) & PAUSE_BIT)
+                {
+                    vTaskDelay(pdMS_TO_TICKS(100)); // Check every 100ms
+                }
                 ESP_LOGI(TAG, "Sensor task resumed after OTA");
             }
         }
