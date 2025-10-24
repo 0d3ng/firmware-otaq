@@ -104,9 +104,17 @@ void ota_monitor_end_stage(const char *stage_name)
         if (totalRunTime > 0)
             cpu_percent = (float)taskStatusArray[i].ulRunTimeCounter / totalRunTime * 100.0f;
 
+        // Di dalam loop for setiap task (setelah cpu_percent calculation):
+        UBaseType_t stack_remaining = taskStatusArray[i].usStackHighWaterMark;
+        size_t stack_free_bytes = stack_remaining * sizeof(StackType_t);
+
+        // Tambahkan stack info ke JSON message
         snprintf(msg, sizeof(msg),
-                 "{\"stage\":\"%s\",\"task\":\"%s\",\"cpu_percent\":%.2f,\"timestamp\":\"%s\"}",
-                 stage_name, taskStatusArray[i].pcTaskName, cpu_percent, timestamp);
+                 "{\"stage\":\"%s\",\"task\":\"%s\",\"cpu_percent\":%.2f,"
+                 "\"stack_free\":%u,\"timestamp\":\"%s\"}",
+                 stage_name, taskStatusArray[i].pcTaskName, cpu_percent,
+                 (unsigned)stack_free_bytes, timestamp);
+
         ESP_LOGI(TAG, "[%s] Task %s CPU usage: %.2f%%", timestamp,
                  taskStatusArray[i].pcTaskName, cpu_percent);
         /* Reset WDT before publishing in case mqtt_publish blocks */
