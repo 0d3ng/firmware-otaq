@@ -8,7 +8,9 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "monocypher-ed25519.h"
+#include "mbedtls/ecdsa.h"
+#include "mbedtls/pk.h"
+#include "mbedtls/md.h"
 #include "cJSON.h"
 #include "mbedtls/sha256.h"
 #include "../miniz/miniz.h"
@@ -39,7 +41,7 @@
 #define UPDATE_ZIP_PATH "/spiffs/update.zip"
 #define FIRMWARE_ENTRY_NAME "firmware-otaq.bin" // sesuai zipmu
 
-static const uint8_t PUBLIC_KEY[32] = {0x84, 0xCE, 0x80, 0x59, 0x6A, 0x49, 0xF7, 0xA8, 0x34, 0x2F, 0x5D, 0xB1, 0x40, 0x4E, 0x26, 0x12, 0xF1, 0x58, 0xA5, 0xD7, 0x4C, 0x95, 0xE0, 0x5D, 0x62, 0xD2, 0xE2, 0x17, 0x60, 0x37, 0x80, 0x23};
+static const uint8_t PUBLIC_KEY[65] = {0x04, 0x86, 0x07, 0xC7, 0x6D, 0xE9, 0x75, 0x64, 0xB0, 0xAD, 0xC2, 0x86, 0x58, 0x85, 0x35, 0x55, 0x5A, 0xB6, 0xE1, 0xDC, 0x6B, 0xFD, 0x86, 0x70, 0x5E, 0xD3, 0x06, 0x7A, 0x2B, 0xC9, 0x1B, 0x48, 0xBB, 0x5E, 0x8A, 0x56, 0x07, 0xBF, 0x9C, 0x6D, 0x8D, 0xF0, 0xEB, 0x08, 0x24, 0xEB, 0x62, 0xC8, 0x18, 0x26, 0x01, 0xA9, 0x60, 0x3C, 0x99, 0xA9, 0x36, 0x6B, 0xF1, 0x3E, 0x4D, 0xDD, 0x5D, 0x70, 0x3D};
 
 static volatile bool ota_flag = false;
 static uint64_t stage_start_time = 0;
@@ -189,7 +191,9 @@ static bool download_zip_to_spiffs(const char *url)
              esp_http_client_get_status_code(client),
              content_length);
 
+    esp_task_wdt_reset(); // Reset WDT before fopen (SPIFFS open may block)
     FILE *f = fopen(UPDATE_ZIP_PATH, "wb");
+    esp_task_wdt_reset(); // Reset WDT after fopen
     if (!f)
     {
         ESP_LOGE(TAG, "Failed to open %s for writing", UPDATE_ZIP_PATH);
@@ -710,15 +714,30 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     }
     ota_monitor_end_stage("hexstr_to_bytes");
 
-    // verify ed25519 over the 32-byte hash
+    // verify ECDSA over the 32-byte hash
     ota_monitor_start_stage();
-    if (crypto_ed25519_check(signature, PUBLIC_KEY, calc_hash, 32) != 0)
+    mbedtls_pk_context pk;
+    mbedtls_pk_init(&pk);
+
+    int ret = mbedtls_pk_parse_public_key(&pk, PUBLIC_KEY, sizeof(PUBLIC_KEY));
+    if (ret != 0)
     {
-        ESP_LOGE(TAG, "[OTA] Signature verification FAILED");
+        ESP_LOGE(TAG, "[OTA] Failed to parse public key: %d", ret);
         esp_ota_end(ota_handle);
         free(manifest);
         return false;
     }
+
+    ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, calc_hash, 32, signature, SIG_LEN);
+    if (ret != 0)
+    {
+        ESP_LOGE(TAG, "[OTA] Signature verification FAILED: %d", ret);
+        esp_ota_end(ota_handle);
+        free(manifest);
+        return false;
+    }
+
+    mbedtls_pk_free(&pk);
     ota_monitor_end_stage("verify_signature");
     ESP_LOGI(TAG, "[OTA] Hash and signature verified OK");
 
