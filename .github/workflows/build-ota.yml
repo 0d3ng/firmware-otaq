@@ -81,6 +81,7 @@ jobs:
 
           # measure signing time inside Python and write it into manifest.json
           python3 - <<'EOF'
+          import cryptography
           import json, hashlib, time
           from cryptography.hazmat.primitives import hashes
           from cryptography.hazmat.primitives.asymmetric import ec
