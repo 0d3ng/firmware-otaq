@@ -86,7 +86,7 @@ jobs:
           from cryptography.hazmat.primitives.asymmetric import ec
           from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
           import os
-          print("cryptography version:", ec.__module__)
+          print("cryptography version:", cryptography.__version__)
 
           fw_file = "build/firmware-otaq.bin"
           with open(fw_file, "rb") as f:
