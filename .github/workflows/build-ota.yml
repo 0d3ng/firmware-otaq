@@ -85,7 +85,7 @@ jobs:
           import json, hashlib, time
           from cryptography.hazmat.primitives import hashes
           from cryptography.hazmat.primitives.asymmetric import ec
-          from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+          from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
           import os
           print("cryptography version:", cryptography.__version__)
 
@@ -112,7 +112,7 @@ jobs:
           signing_ms = (t1 - t0) * 1000.0
 
           # Convert to raw r||s format for compatibility with updater
-          r, s = encode_dss_signature(signature)
+          r, s = decode_dss_signature(signature)
           signature_bytes = r.to_bytes(32, 'big') + s.to_bytes(32, 'big')
           signature_hex = signature_bytes.hex()
 
