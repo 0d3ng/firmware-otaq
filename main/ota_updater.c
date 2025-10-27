@@ -181,7 +181,9 @@ static bool download_zip_to_spiffs(const char *url)
              esp_http_client_get_status_code(client),
              content_length);
 
+    esp_task_wdt_reset(); // Reset WDT before fopen (SPIFFS open may block)
     FILE *f = fopen(UPDATE_ZIP_PATH, "wb");
+    esp_task_wdt_reset(); // Reset WDT after fopen
     if (!f)
     {
         ESP_LOGE(TAG, "Failed to open %s for writing", UPDATE_ZIP_PATH);
