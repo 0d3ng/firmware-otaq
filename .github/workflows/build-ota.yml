@@ -103,8 +103,7 @@ jobs:
           if len(private_key_hex) != 64:
               raise ValueError("Invalid ECDSA private key length")
 
-          private_key_bytes = bytes.fromhex(private_key_hex)
-          private_key = ec.derive_private_key(private_key_bytes, ec.SECP256R1())
+          private_key = ec.derive_private_key(int(private_key_hex, 16), ec.SECP256R1())
 
           # time the signing (hashing already done above)
           t0 = time.perf_counter()
