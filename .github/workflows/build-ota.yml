@@ -73,7 +73,7 @@ jobs:
       - name: Create manifest.json & package using ECDSA
         id: sign_package
         env:
-          ECDSA_PRIVATE_KEY_HEX: ${{ secrets.ECDSA_PRIVATE_KEY_HEX }}
+          ECDSA_PRIVATE_KEY_PEM: ${{ secrets.ECDSA_256_PRIVATE_KEY_PEM }}
           VERSION: ${{ env.FIRMWARE_VERSION }} # or any other versioning scheme
         run: |
           # measure entire step (python + zip)
@@ -83,7 +83,7 @@ jobs:
           python3 - <<'EOF'
           import cryptography
           import json, hashlib, time
-          from cryptography.hazmat.primitives import hashes
+          from cryptography.hazmat.primitives import hashes, serialization
           from cryptography.hazmat.primitives.asymmetric import ec
           from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
           import os
@@ -95,15 +95,19 @@ jobs:
           digest = hashlib.sha256(data).digest()
           print(f"Firmware {fw_file} size={len(data)} sha256={digest.hex()}")
 
-          # Load private key from GitHub Secrets (hex string)
-          private_key_hex = os.environ.get("ECDSA_PRIVATE_KEY_HEX","").strip()
-          print(f"Raw key repr: {repr(private_key_hex)}")
-          print(f"Length after strip: {len(private_key_hex)}")
+          # Load private key from GitHub Secrets (PEM string)
+          private_key_pem = os.environ.get("ECDSA_PRIVATE_KEY_PEM","").strip()
+          print(f"Raw key repr: {repr(private_key_pem)}")
+          print(f"Length after strip: {len(private_key_pem)}")
 
-          if len(private_key_hex) != 64:
-              raise ValueError("Invalid ECDSA private key length")
+          if not private_key_pem:
+              raise ValueError("ECDSA private key (PEM) not found in environment variable")
 
-          private_key = ec.derive_private_key(int(private_key_hex, 16), ec.SECP256R1())
+          private_key = serialization.load_pem_private_key(
+              private_key_pem.encode('utf-8'),
+              password=None, # Assuming the key is not encrypted
+              backend=cryptography.hazmat.backends.default_backend()
+          )
 
           # time the signing (hashing already done above)
           t0 = time.perf_counter()
