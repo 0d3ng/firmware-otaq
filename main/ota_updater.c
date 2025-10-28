@@ -37,7 +37,7 @@
 // #define OTA_URL "http://192.168.137.1:8000/api/v1/firmware/firmware.zip"
 #define TAG "OTA_SECURE"
 #define MAX_MANIFEST_SIZE 4096
-#define SIG_LEN 64
+#define SIG_LEN 128
 
 #define UPDATE_ZIP_PATH "/spiffs/update.zip"
 #define FIRMWARE_ENTRY_NAME "firmware-otaq.bin" // sesuai zipmu
@@ -704,6 +704,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     // 6) verify signature: signature is hex in manifest -> bytes
     ota_monitor_start_stage();
     uint8_t signature[SIG_LEN];
+    size_t sig_hex_len = strlen(signature_hex) / 2;
     if (!hexstr_to_bytes(signature_hex, signature, SIG_LEN))
     {
         ESP_LOGE(TAG, "[OTA] Signature hex->bytes conversion failed");
@@ -727,7 +728,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
         return false;
     }
 
-    ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, calc_hash, 32, signature, SIG_LEN);
+    ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, calc_hash, 32, signature, sig_hex_len);
     if (ret != 0)
     {
         ESP_LOGE(TAG, "[OTA] Signature verification FAILED: %d", ret);
