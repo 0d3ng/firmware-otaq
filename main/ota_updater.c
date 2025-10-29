@@ -557,7 +557,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
 
     // parse manifest
     char expected_hash_hex[65];
-    char signature_hex[129];
+    char signature_hex[145];
     char new_version[64];
     if (!parse_manifest(manifest, expected_hash_hex, sizeof(expected_hash_hex),
                         signature_hex, sizeof(signature_hex),
