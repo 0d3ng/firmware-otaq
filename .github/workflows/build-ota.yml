@@ -137,7 +137,7 @@ jobs:
       - name: Upload package via API
         run: |
           STATUS=$(curl -s -o response.txt -w "%{http_code}" \
-            -X POST "${{ secrets.API_URL }}/firmware/upload" \
+            -X POST "${{ vars.API_URL }}/firmware/upload" \
             -H "Authorization: Bearer ${{ secrets.API_TOKEN }}" \
             -F "file=@firmware.zip")
 
