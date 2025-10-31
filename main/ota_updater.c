@@ -19,6 +19,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "certs/isrgrootx1.h"
+#include "certs/fullchain.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "mqtt_app.h"
@@ -165,7 +166,7 @@ static bool download_zip_to_spiffs(const char *url)
 {
     esp_http_client_config_t config = {
         .url = url,
-        .cert_pem = (const char *)isrgrootx1_pem,
+        .cert_pem = fullchain_pem,
         .skip_cert_common_name_check = false,
         .timeout_ms = 30000};
 
