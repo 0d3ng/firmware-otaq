@@ -7,6 +7,8 @@
 #include "ota_updater.h"
 #include "sensor_task.h"
 #include "ntp.h"
+#include "ecdsa_verify_p256.h"
+#include "ecdsa_verify_p384.h"
 
 static const char *TAG = "main_app";
 
@@ -45,4 +47,10 @@ void app_main(void)
     xTaskCreate(ota_task, "ota_task", 16384, NULL, 5, NULL);
 
     ESP_LOGI(TAG, "System initialized. Waiting for MQTT OTA trigger...");
+
+    // run ecdsa verify P-256
+    // run_ecdsa_verify_p256();
+
+    // // run ecdsa verify P-384
+    // run_ecdsa_verify_p384();
 }
