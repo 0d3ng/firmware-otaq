@@ -729,7 +729,8 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
         return false;
     }
 
-    ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, calc_hash, 32, signature, sig_hex_len);
+    // ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, calc_hash, 32, signature, sig_hex_len);
+    ret = mbedtls_ecdsa_read_signature(&pk, calc_hash, 32, signature, sig_hex_len);
     if (ret != 0)
     {
         ESP_LOGE(TAG, "[OTA] Signature verification FAILED: %d", ret);
