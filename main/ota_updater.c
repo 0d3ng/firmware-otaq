@@ -729,13 +729,12 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
         return false;
     }
 
-    // ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, calc_hash, 32, signature, sig_hex_len);
-    ret = mbedtls_ecdsa_read_signature(&pk, calc_hash, 32, signature, sig_hex_len);
     ESP_LOGI(TAG, "[OTA] pk type: %d", mbedtls_pk_get_type(&pk));
     ESP_LOGI(TAG, "[OTA] Signature length: %d", sig_len);
     ESP_LOGI(TAG, "[OTA] Hash length: %d", (int)sizeof(calc_hash));
     ESP_LOG_BUFFER_HEX(TAG, calc_hash, sizeof(calc_hash));
-    ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, calc_hash, 0, signature, sig_len);
+    ret = mbedtls_ecdsa_read_signature(&pk, calc_hash, 32, signature, sig_len);
+    // ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, calc_hash, 0, signature, sig_len);
     if (ret != 0)
     {
         ESP_LOGE(TAG, "[OTA] Signature verification FAILED: %d", ret);
