@@ -25,7 +25,7 @@
 #include "esp_timer.h"
 #include "mqtt_app.h"
 #include "ota_control.h"
-#include "certs/pub_ecdsa256.h"
+#include "certs/pub_ecdsa.h"
 
 // polinema server https
 #define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firmware/firmware.zip"
@@ -46,6 +46,12 @@
 
 static volatile bool ota_flag = false;
 static uint64_t stage_start_time = 0;
+
+#define HASH_LEN_BYTES 48
+#define HASH_HEX_LEN (HASH_LEN_BYTES * 2)
+#define HASH_HEX_BUF (HASH_HEX_LEN + 1)
+
+#define SIG_BUF_LEN 256
 
 // measure time spent in each stage
 void ota_monitor_start_stage(void)
@@ -557,8 +563,8 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     ESP_LOGI(TAG, "[ZIP] manifest extracted (%d bytes):\n%s", (int)manifest_len, manifest);
 
     // parse manifest
-    char expected_hash_hex[65];
-    char signature_hex[145];
+    char expected_hash_hex[96];
+    char signature_hex[512];
     char new_version[64];
     if (!parse_manifest(manifest, expected_hash_hex, sizeof(expected_hash_hex),
                         signature_hex, sizeof(signature_hex),
@@ -666,7 +672,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     }
 
     // finish SHA
-    uint8_t calc_hash[32];
+    uint8_t calc_hash[48];
     mbedtls_sha256_finish(&cb_state.sha_ctx, calc_hash);
     mbedtls_sha256_free(&cb_state.sha_ctx);
 
@@ -686,10 +692,10 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
 
     // 5) compare hash (calc_hash) with expected_hash_hex
     ota_monitor_start_stage();
-    char calc_hash_hex[65];
-    for (int i = 0; i < 32; ++i)
+    char calc_hash_hex[97];
+    for (int i = 0; i < 48; ++i)
         sprintf(calc_hash_hex + i * 2, "%02x", calc_hash[i]);
-    calc_hash_hex[64] = '\0';
+    calc_hash_hex[96] = '\0';
     ESP_LOGI(TAG, "[OTA] computed hash: %s", calc_hash_hex);
 
     if (strcmp(calc_hash_hex, expected_hash_hex) != 0)
