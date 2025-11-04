@@ -92,8 +92,8 @@ jobs:
           fw_file = "build/firmware-otaq.bin"
           with open(fw_file, "rb") as f:
               data = f.read()
-          digest = hashlib.sha256(data).digest()
-          print(f"Firmware {fw_file} size={len(data)} sha256={digest.hex()}")
+          digest = hashlib.sha384(data).digest()
+          print(f"Firmware {fw_file} size={len(data)} sha384={digest.hex()}")
 
           # Load private key from GitHub Secrets (PEM string)
           private_key_pem = os.environ.get("ECDSA_PRIVATE_KEY_PEM","").strip()

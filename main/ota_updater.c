@@ -661,7 +661,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
 
     // init SHA
     mbedtls_sha512_init(&cb_state.sha_ctx);
-    mbedtls_sha512_starts(&cb_state.sha_ctx, 0); // use SHA-384
+    mbedtls_sha512_starts(&cb_state.sha_ctx, 1); // use SHA-384
     // 4) extract firmware with callback (streaming -> OTA)
     ESP_LOGI(TAG, "[ZIP] Start streaming firmware from zip to OTA (callback)");
     if (!mz_zip_reader_extract_to_callback(&zip, fw_index, mz_to_ota_callback, &cb_state, 0))
@@ -694,7 +694,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     char calc_hash_hex[HASH_HEX_BUF];
     for (int i = 0; i < HASH_LEN_BYTES; ++i)
         sprintf(calc_hash_hex + i * 2, "%02x", calc_hash[i]);
-    calc_hash_hex[96] = '\0';
+    calc_hash_hex[HASH_HEX_LEN] = '\0';
     ESP_LOGI(TAG, "[OTA] computed hash: %s", calc_hash_hex);
 
     if (strcmp(calc_hash_hex, expected_hash_hex) != 0)
