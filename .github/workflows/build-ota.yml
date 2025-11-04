@@ -110,7 +110,7 @@ jobs:
 
           # time the signing (hashing already done above)
           t0 = time.perf_counter()
-          signature = private_key.sign(digest, ec.ECDSA(hashes.SHA256()))
+          signature = private_key.sign(data, ec.ECDSA(hashes.SHA256()))
           t1 = time.perf_counter()
           signing_ms = (t1 - t0) * 1000.0
 

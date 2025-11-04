@@ -13,6 +13,7 @@
 #include "mbedtls/md.h"
 #include "cJSON.h"
 #include "mbedtls/sha256.h"
+#include "mbedtls/error.h"
 #include "../miniz/miniz.h"
 #include <string.h>
 #include <stdlib.h>
@@ -413,21 +414,20 @@ static int compare_firmware_versions(const char *cur_ver, const char *new_ver)
 }
 
 /* ---------------- helper: hex -> bytes ---------------- */
-static bool hexstr_to_bytes(const char *hex, uint8_t *out, size_t out_len)
+int hexstr_to_bytes(const char *hex, uint8_t *out, size_t out_len)
 {
     size_t hlen = strlen(hex);
-    if (hlen % 2 != 0)
-        return false;
-    if (out_len < hlen / 2)
-        return false;
+    if (hlen % 2 != 0 || out_len < hlen / 2)
+        return -1;
+
     for (size_t i = 0; i < hlen / 2; ++i)
     {
         unsigned int v;
         if (sscanf(hex + i * 2, "%2x", &v) != 1)
-            return false;
+            return -2;
         out[i] = (uint8_t)v;
     }
-    return true;
+    return (int)(hlen / 2); // return actual length
 }
 
 /* ---------------- Callback state for miniz extraction -> OTA ----------------
@@ -705,14 +705,15 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     // 6) verify signature: signature is hex in manifest -> bytes
     ota_monitor_start_stage();
     uint8_t signature[SIG_LEN];
-    size_t sig_hex_len = strlen(signature_hex) / 2;
-    if (!hexstr_to_bytes(signature_hex, signature, SIG_LEN))
+    int sig_len = hexstr_to_bytes(signature_hex, signature, sizeof(signature));
+    if (sig_len < 0)
     {
-        ESP_LOGE(TAG, "[OTA] Signature hex->bytes conversion failed");
+        ESP_LOGE(TAG, "[OTA] Signature hex->bytes conversion failed: %d", sig_len);
         esp_ota_end(ota_handle);
         free(manifest);
         return false;
     }
+    ESP_LOG_BUFFER_HEX(TAG, signature, sig_len);
     ota_monitor_end_stage("hexstr_to_bytes");
 
     // verify ECDSA over the 32-byte hash
@@ -723,16 +724,22 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     int ret = mbedtls_pk_parse_public_key(&pk, PUBLIC_KEY_PEM_P256, sizeof(PUBLIC_KEY_PEM_P256));
     if (ret != 0)
     {
-        ESP_LOGE(TAG, "[OTA] Failed to parse public key: %d", ret);
+        ESP_LOGE(TAG, "[OTA] Failed to parse public key: -0x%04X", -ret);
         esp_ota_end(ota_handle);
         free(manifest);
         return false;
     }
 
-    ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, calc_hash, 32, signature, sig_hex_len);
+    ESP_LOGI(TAG, "[OTA] pk type: %d", mbedtls_pk_get_type(&pk));
+    ESP_LOGI(TAG, "[OTA] Signature length: %d", sig_len);
+    ESP_LOGI(TAG, "[OTA] Hash length: %d", (int)sizeof(calc_hash));
+    ESP_LOG_BUFFER_HEX(TAG, calc_hash, sizeof(calc_hash));
+    ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, calc_hash, 0, signature, sig_len);
     if (ret != 0)
     {
-        ESP_LOGE(TAG, "[OTA] Signature verification FAILED: %d", ret);
+        char err_buf[200];
+        mbedtls_strerror(ret, err_buf, sizeof(err_buf));
+        ESP_LOGE(TAG, "[OTA] Signature verification FAILED: -0x%04X (%d): %s", -ret, ret, err_buf);
         esp_ota_end(ota_handle);
         free(manifest);
         return false;
