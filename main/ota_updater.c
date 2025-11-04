@@ -727,7 +727,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
         free(manifest);
         return false;
     }
-    ESP_LOG_BUFFER_HEX(TAG, signature, sig_len);
+    // ESP_LOG_BUFFER_HEX(TAG, signature, sig_len);
     ota_monitor_end_stage("hexstr_to_bytes");
 
     // verify ECDSA over the 32-byte hash
@@ -747,7 +747,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     ESP_LOGI(TAG, "[OTA] pk type: %d", mbedtls_pk_get_type(&pk));
     ESP_LOGI(TAG, "[OTA] Signature length: %d", sig_len);
     ESP_LOGI(TAG, "[OTA] Hash length: %d", (int)sizeof(calc_hash));
-    ESP_LOG_BUFFER_HEX(TAG, calc_hash, sizeof(calc_hash));
+    // ESP_LOG_BUFFER_HEX(TAG, calc_hash, sizeof(calc_hash));
     ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA384, calc_hash, 0, signature, sig_len);
     if (ret != 0)
     {
