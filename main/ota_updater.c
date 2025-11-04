@@ -305,11 +305,20 @@ static bool parse_manifest(const char *manifest_str, char *hash_out, size_t hash
         return false;
     }
 
+    ESP_LOGI(TAG, "Manifest field lengths -> hash: %d, sig: %d, version: %d",
+             strlen(hash_item->valuestring),
+             strlen(sig_item->valuestring),
+             strlen(version_item->valuestring));
+
     if (strlen(hash_item->valuestring) >= hash_len ||
         strlen(sig_item->valuestring) >= sig_len ||
         strlen(version_item->valuestring) >= version_len)
     {
-        ESP_LOGE(TAG, "Manifest values too long for buffers");
+        ESP_LOGE(TAG, "Manifest values too long for buffers "
+                      "(hash:%d/%d sig:%d/%d ver:%d/%d)",
+                 strlen(hash_item->valuestring), hash_len,
+                 strlen(sig_item->valuestring), sig_len,
+                 strlen(version_item->valuestring), version_len);
         cJSON_Delete(root);
         return false;
     }
@@ -563,7 +572,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     ESP_LOGI(TAG, "[ZIP] manifest extracted (%d bytes):\n%s", (int)manifest_len, manifest);
 
     // parse manifest
-    char expected_hash_hex[HASH_HEX_LEN];
+    char expected_hash_hex[HASH_HEX_BUF];
     char signature_hex[SIG_BUF_LEN];
     char new_version[64];
     if (!parse_manifest(manifest, expected_hash_hex, sizeof(expected_hash_hex),
@@ -718,7 +727,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
         free(manifest);
         return false;
     }
-    ESP_LOG_BUFFER_HEX(TAG, signature, sig_len);
+    // ESP_LOG_BUFFER_HEX(TAG, signature, sig_len);
     ota_monitor_end_stage("hexstr_to_bytes");
 
     // verify ECDSA over the 32-byte hash
@@ -738,7 +747,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     ESP_LOGI(TAG, "[OTA] pk type: %d", mbedtls_pk_get_type(&pk));
     ESP_LOGI(TAG, "[OTA] Signature length: %d", sig_len);
     ESP_LOGI(TAG, "[OTA] Hash length: %d", (int)sizeof(calc_hash));
-    ESP_LOG_BUFFER_HEX(TAG, calc_hash, sizeof(calc_hash));
+    // ESP_LOG_BUFFER_HEX(TAG, calc_hash, sizeof(calc_hash));
     ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA384, calc_hash, 0, signature, sig_len);
     if (ret != 0)
     {
