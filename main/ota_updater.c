@@ -13,6 +13,7 @@
 #include "mbedtls/md.h"
 #include "cJSON.h"
 #include "mbedtls/sha256.h"
+#include "mbedtls/error.h"
 #include "../miniz/miniz.h"
 #include <string.h>
 #include <stdlib.h>
@@ -723,7 +724,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     int ret = mbedtls_pk_parse_public_key(&pk, PUBLIC_KEY_PEM_P256, sizeof(PUBLIC_KEY_PEM_P256));
     if (ret != 0)
     {
-        ESP_LOGE(TAG, "[OTA] Failed to parse public key: %d", ret);
+        ESP_LOGE(TAG, "[OTA] Failed to parse public key: -0x%04X", -ret);
         esp_ota_end(ota_handle);
         free(manifest);
         return false;
@@ -733,11 +734,12 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     ESP_LOGI(TAG, "[OTA] Signature length: %d", sig_len);
     ESP_LOGI(TAG, "[OTA] Hash length: %d", (int)sizeof(calc_hash));
     ESP_LOG_BUFFER_HEX(TAG, calc_hash, sizeof(calc_hash));
-    ret = mbedtls_ecdsa_read_signature(&pk, calc_hash, 32, signature, sig_len);
-    // ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, calc_hash, 0, signature, sig_len);
+    ret = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, calc_hash, 0, signature, sig_len);
     if (ret != 0)
     {
-        ESP_LOGE(TAG, "[OTA] Signature verification FAILED: %d", ret);
+        char err_buf[200];
+        mbedtls_strerror(ret, err_buf, sizeof(err_buf));
+        ESP_LOGE(TAG, "[OTA] Signature verification FAILED: -0x%04X (%d): %s", -ret, ret, err_buf);
         esp_ota_end(ota_handle);
         free(manifest);
         return false;
