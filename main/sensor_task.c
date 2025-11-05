@@ -71,7 +71,7 @@ void sensor_task(void *pvParameter)
         {
             temperature_c = temperature / 10.0;
             humidity_rh = humidity / 10.0;
-            ESP_LOGI(TAG, "DHT22 read success: Temp=%.2f°C, Humi=%.2f%% (Time taken: %d ticks)", temperature_c, humidity_rh, (T1 - T0) * portTICK_PERIOD_MS);
+            // ESP_LOGI(TAG, "DHT22 read success: Temp=%.2f°C, Humi=%.2f%% (Time taken: %d ticks)", temperature_c, humidity_rh, (T1 - T0) * portTICK_PERIOD_MS);
         }
 
         // read battery voltage
@@ -81,12 +81,12 @@ void sensor_task(void *pvParameter)
         // create JSON payload
         char payload[256];
         snprintf(payload, sizeof(payload), "{\"temperature\":%.2f,\"humidity\":%.2f,\"voltage\":%.3f,\"timestamp\":\"%s\"}", temperature_c, humidity_rh, voltage, timestamp);
-        ESP_LOGI(TAG, "Payload: %s", payload);
+        // ESP_LOGI(TAG, "Payload: %s", payload);
         // publish via MQTT
         mqtt_publish("device/002/sensor", payload);
 
         ESP_LOGI(TAG, "[%s] Published Temp: %.2f°C | Humi: %.2f%% | Volt: %.3fV", timestamp, temperature_c, humidity_rh, voltage);
 
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }

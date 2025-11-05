@@ -41,6 +41,12 @@
 #define MAX_MANIFEST_SIZE 4096
 #define SIG_LEN 128
 
+#define HASH_LEN_BYTES 32
+#define HASH_HEX_LEN (HASH_LEN_BYTES * 2)
+#define HASH_HEX_BUF (HASH_HEX_LEN + 1)
+
+#define SIG_BUF_LEN 128
+
 #define UPDATE_ZIP_PATH "/spiffs/update.zip"
 #define FIRMWARE_ENTRY_NAME "firmware-otaq.bin" // sesuai zipmu
 
@@ -299,11 +305,20 @@ static bool parse_manifest(const char *manifest_str, char *hash_out, size_t hash
         return false;
     }
 
+    ESP_LOGI(TAG, "Manifest field lengths -> hash: %d, sig: %d, version: %d",
+             strlen(hash_item->valuestring),
+             strlen(sig_item->valuestring),
+             strlen(version_item->valuestring));
+
     if (strlen(hash_item->valuestring) >= hash_len ||
         strlen(sig_item->valuestring) >= sig_len ||
         strlen(version_item->valuestring) >= version_len)
     {
-        ESP_LOGE(TAG, "Manifest values too long for buffers");
+        ESP_LOGE(TAG, "Manifest values too long for buffers "
+                      "(hash:%d/%d sig:%d/%d ver:%d/%d)",
+                 strlen(hash_item->valuestring), hash_len,
+                 strlen(sig_item->valuestring), sig_len,
+                 strlen(version_item->valuestring), version_len);
         cJSON_Delete(root);
         return false;
     }
@@ -557,8 +572,8 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     ESP_LOGI(TAG, "[ZIP] manifest extracted (%d bytes):\n%s", (int)manifest_len, manifest);
 
     // parse manifest
-    char expected_hash_hex[65];
-    char signature_hex[145];
+    char expected_hash_hex[HASH_HEX_BUF];
+    char signature_hex[SIG_BUF_LEN];
     char new_version[64];
     if (!parse_manifest(manifest, expected_hash_hex, sizeof(expected_hash_hex),
                         signature_hex, sizeof(signature_hex),
@@ -666,7 +681,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     }
 
     // finish SHA
-    uint8_t calc_hash[32];
+    uint8_t calc_hash[HASH_LEN_BYTES];
     mbedtls_sha256_finish(&cb_state.sha_ctx, calc_hash);
     mbedtls_sha256_free(&cb_state.sha_ctx);
 
@@ -686,10 +701,10 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
 
     // 5) compare hash (calc_hash) with expected_hash_hex
     ota_monitor_start_stage();
-    char calc_hash_hex[65];
-    for (int i = 0; i < 32; ++i)
+    char calc_hash_hex[HASH_HEX_BUF];
+    for (int i = 0; i < HASH_LEN_BYTES; ++i)
         sprintf(calc_hash_hex + i * 2, "%02x", calc_hash[i]);
-    calc_hash_hex[64] = '\0';
+    calc_hash_hex[HASH_HEX_LEN] = '\0';
     ESP_LOGI(TAG, "[OTA] computed hash: %s", calc_hash_hex);
 
     if (strcmp(calc_hash_hex, expected_hash_hex) != 0)
@@ -704,7 +719,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
 
     // 6) verify signature: signature is hex in manifest -> bytes
     ota_monitor_start_stage();
-    uint8_t signature[SIG_LEN];
+    uint8_t signature[SIG_BUF_LEN];
     int sig_len = hexstr_to_bytes(signature_hex, signature, sizeof(signature));
     if (sig_len < 0)
     {
