@@ -13,8 +13,6 @@
 
 static const char *TAG = "main_app";
 
-static const char *TAG_2 = "ECDSA_VERIFY";
-
 void app_main(void)
 {
     printf("Running firmware version: %s\n", FIRMWARE_VERSION);
