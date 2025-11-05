@@ -44,7 +44,7 @@
 #define HASH_HEX_LEN (HASH_LEN_BYTES * 2)
 #define HASH_HEX_BUF (HASH_HEX_LEN + 1)
 
-#define SIG_BUF_LEN 128
+#define SIG_BUF_LEN 145
 
 #define UPDATE_ZIP_PATH "/spiffs/update.zip"
 #define FIRMWARE_ENTRY_NAME "firmware-otaq.bin" // sesuai zipmu
