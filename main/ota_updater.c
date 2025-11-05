@@ -41,6 +41,12 @@
 #define MAX_MANIFEST_SIZE 4096
 #define SIG_LEN 128
 
+#define HASH_LEN_BYTES 32
+#define HASH_HEX_LEN (HASH_LEN_BYTES * 2)
+#define HASH_HEX_BUF (HASH_HEX_LEN + 1)
+
+#define SIG_BUF_LEN 128
+
 #define UPDATE_ZIP_PATH "/spiffs/update.zip"
 #define FIRMWARE_ENTRY_NAME "firmware-otaq.bin" // sesuai zipmu
 
@@ -681,8 +687,8 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
 
     // finish SHA
     uint8_t calc_hash[HASH_LEN_BYTES];
-    mbedtls_sha512_finish(&cb_state.sha_ctx, calc_hash);
-    mbedtls_sha512_free(&cb_state.sha_ctx);
+    mbedtls_sha256_finish(&cb_state.sha_ctx, calc_hash);
+    mbedtls_sha256_free(&cb_state.sha_ctx);
 
     // close zip
     mz_zip_reader_end(&zip);
