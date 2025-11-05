@@ -21,6 +21,7 @@
 #include "esp_timer.h"
 #include "mqtt_app.h"
 #include "ota_control.h"
+#include "certs/fullchain.h"
 
 // polinema server https
 #define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firmware/firmware.zip"
@@ -164,7 +165,7 @@ static bool download_zip_to_spiffs(const char *url)
 {
     esp_http_client_config_t config = {
         .url = url,
-        .cert_pem = (const char *)isrgrootx1_pem,
+        .cert_pem = fullchain_pem,
         .skip_cert_common_name_check = false,
         .timeout_ms = 30000};
 
@@ -296,11 +297,20 @@ static bool parse_manifest(const char *manifest_str, char *hash_out, size_t hash
         return false;
     }
 
+    ESP_LOGI(TAG, "Manifest field lengths -> hash: %d, sig: %d, version: %d",
+             strlen(hash_item->valuestring),
+             strlen(sig_item->valuestring),
+             strlen(version_item->valuestring));
+
     if (strlen(hash_item->valuestring) >= hash_len ||
         strlen(sig_item->valuestring) >= sig_len ||
         strlen(version_item->valuestring) >= version_len)
     {
-        ESP_LOGE(TAG, "Manifest values too long for buffers");
+        ESP_LOGE(TAG, "Manifest values too long for buffers "
+                      "(hash:%d/%d sig:%d/%d ver:%d/%d)",
+                 strlen(hash_item->valuestring), hash_len,
+                 strlen(sig_item->valuestring), sig_len,
+                 strlen(version_item->valuestring), version_len);
         cJSON_Delete(root);
         return false;
     }
