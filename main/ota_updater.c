@@ -19,13 +19,11 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include "certs/isrgrootx1.h"
-#include "certs/fullchain.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "mqtt_app.h"
 #include "ota_control.h"
-#include "certs/pub_ecdsa.h"
+#include "certs/fullchain.h"
 
 // polinema server https
 #define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firmware/firmware.zip"
