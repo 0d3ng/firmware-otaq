@@ -16,7 +16,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include "certs/isrgrootx1.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "mqtt_app.h"
