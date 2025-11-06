@@ -172,8 +172,18 @@ void mount_spiffs()
 */
 static bool download_zip_to_spiffs(const char *url)
 {
-    uint64_t t_download = esp_timer_get_time();
-    nvs_util_set_u64("ota", "download_time", t_download);
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+
+    // create timestamp ISO 8601
+    char timestamp[64];
+    snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02dT%02d:%02d:%02d",
+             timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+    ESP_LOGI(TAG, "[%s] Starting download from %s", timestamp, url);
+    nvs_util_set_u64("ota", "download_time", now);
     esp_http_client_config_t config = {
         .url = url,
         .cert_pem = fullchain_pem,
@@ -786,10 +796,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     // optionally remove update.zip from SPIFFS to free space
     remove(zip_path);
 
-    vTaskDelay(pdMS_TO_TICKS(500));
-
-    uint64_t t_boot_start = esp_timer_get_time();
-    nvs_util_set_u64("ota", "boot_start_time", t_boot_start);
+    vTaskDelay(pdMS_TO_TICKS(500)); // is needed because we're measuring time until application ready?
     esp_restart();
     return true;
 }
