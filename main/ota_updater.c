@@ -26,6 +26,7 @@
 #include "mqtt_app.h"
 #include "ota_control.h"
 #include "certs/pub_ecdsa.h"
+#include "nvs_util.h"
 
 // polinema server https
 #define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firmware/firmware.zip"

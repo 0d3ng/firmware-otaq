@@ -1,7 +1,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
-#include "nvs_flash.h"
 #include "wifi_connect.h"
 #include "mqtt_app.h"
 #include "ota_updater.h"
@@ -10,24 +9,20 @@
 #include "ecdsa_verify_p256.h"
 #include "ecdsa_verify_p384.h"
 #include "ecdsa_verify_p256_esp32.h"
+#include "nvs_util.h"
 
 static const char *TAG = "main_app";
-
-static const char *TAG_2 = "ECDSA_VERIFY";
 
 void app_main(void)
 {
     printf("Running firmware version: %s\n", FIRMWARE_VERSION);
     ESP_LOGI(TAG, "Starting system...");
+    uint64_t boot_end_time = esp_timer_get_time();
+    ESP_LOGI(TAG, "Boot end time: %.2f ms", (boot_end_time) / 1000.0f);
+
     // NVS init
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
+    esp_err_t ret = nvs_util_init();
     ESP_ERROR_CHECK(ret);
-    ESP_LOGI(TAG, "NVS initialized.");
 
     // WiFi
     ESP_LOGI(TAG, "Connecting to WiFi...");
