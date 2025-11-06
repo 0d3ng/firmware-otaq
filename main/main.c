@@ -68,13 +68,4 @@ void app_main(void)
         ESP_LOGW(TAG, "Failed to get download_time from NVS: %s", esp_err_to_name(ret));
     }
     ESP_LOGI(TAG, "System initialized. Waiting for MQTT OTA trigger...");
-
-    // run ecdsa verify P-256
-    // run_ecdsa_verify_p256();
-
-    // // run ecdsa verify P-384
-    // run_ecdsa_verify_p384();
-
-    // run ecdsa verify P-256 ESP32 optimized
-    // run_ecdsa_verify_p256_esp32();
 }
