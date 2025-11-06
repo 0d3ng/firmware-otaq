@@ -172,6 +172,8 @@ void mount_spiffs()
 */
 static bool download_zip_to_spiffs(const char *url)
 {
+    uint64_t t_download = esp_timer_get_time();
+    nvs_util_set_u64("ota", "download_time", t_download);
     esp_http_client_config_t config = {
         .url = url,
         .cert_pem = fullchain_pem,
@@ -785,6 +787,9 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     remove(zip_path);
 
     vTaskDelay(pdMS_TO_TICKS(500));
+
+    uint64_t t_boot_start = esp_timer_get_time();
+    nvs_util_set_u64("ota", "boot_start_time", t_boot_start);
     esp_restart();
     return true;
 }
