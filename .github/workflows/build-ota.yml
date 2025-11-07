@@ -1,15 +1,16 @@
 name: ESP-IDF Build & Secure OTA (ECDSA)
 
 on:
-  pull_request:
-    branches:
-      - master
-      - development
-    types: [closed]
+  workflow_dispatch:
+    inputs:
+      padding_kb:
+        description: "Size padding on KB (0 = without padding, 128 = 128KB padding, 256 = 256KB padding, 512 = 512KB padding, 1024 = 1MB padding)"
+        required: true
+        default: "0"
 
 jobs:
   build-ota:
-    if: github.event.pull_request.merged == true
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: firmware env
 
@@ -62,6 +63,33 @@ jobs:
           echo "=== Step 5: Check sdkconfig.h after build ==="
           grep FREERTOS_USE_TRACE_FACILITY build/config/sdkconfig.h || echo "TRACE_FACILITY not found"
           grep FREERTOS_USE_STATS_FORMATTING_FUNCTIONS build/config/sdkconfig.h || echo "STATS_FUNCTIONS not found"
+
+      - name: Apply firmware padding
+        run: |
+          PADDING_KB=${{ github.event.inputs.padding_kb }}
+          FW="build/firmware-otaq.bin"
+
+          echo "Requested padding: ${PADDING_KB} KB"
+
+          if [ -z "$PADDING_KB" ]; then
+            echo "No padding input. Using default 0."
+            PADDING_KB=0
+          fi
+
+          if [ "$PADDING_KB" -eq 0 ]; then
+            echo "No padding applied."
+          else
+            ORIG_SIZE=$(stat -c%s "$FW")
+            NEW_SIZE=$(( ORIG_SIZE + PADDING_KB*1024 ))
+
+            echo "Original size: $ORIG_SIZE bytes"
+            echo "New target size: $NEW_SIZE bytes"
+
+            truncate -s $NEW_SIZE "$FW"
+
+            echo "Final size:"
+            stat -c%s "$FW"
+          fi
 
       - name: Upload build logs
         if: failure()
