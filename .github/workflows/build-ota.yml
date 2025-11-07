@@ -8,15 +8,9 @@ on:
         required: true
         default: "0"
 
-  pull_request:
-    branches:
-      - master
-      - development
-    types: [closed]
-
 jobs:
   build-ota:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: firmware env
 
