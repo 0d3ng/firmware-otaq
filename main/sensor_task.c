@@ -31,13 +31,13 @@ void sensor_task(void *pvParameter)
     vTaskDelay(pdMS_TO_TICKS(1000)); // Tunggu sensor siap
     ESP_LOGI(TAG, "Sensor DHT22 ready. Starting data read loop...");
 
-    adc_oneshot_unit_handle_t adc_handle;
-    adc_cali_handle_t cali_handle;
+    // adc_oneshot_unit_handle_t adc_handle;
+    // adc_cali_handle_t cali_handle;
 
-    battery_adc_init(&adc_handle, &cali_handle, ADC_CHANNEL);
+    // battery_adc_init(&adc_handle, &cali_handle, ADC_CHANNEL);
 
-    EventGroupHandle_t eg = ota_control_get_event_group();
-    const EventBits_t PAUSE_BIT = (1 << 0);
+    // EventGroupHandle_t eg = ota_control_get_event_group();
+    // const EventBits_t PAUSE_BIT = (1 << 0);
 
     i2c_master_bus_handle_t bus;
 
