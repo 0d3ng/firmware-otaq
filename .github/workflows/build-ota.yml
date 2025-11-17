@@ -1,4 +1,4 @@
-name: ESP-IDF Build & Secure OTA (ECDSA)
+name: ESP-IDF Build & Secure OTA (ECDSA 384)
 
 on:
   pull_request:
