@@ -151,6 +151,7 @@ void sensor_task(void *pvParameter)
             snprintf(payload, sizeof(payload), "{\"volt\":%.3f,\"current\":%.3f,\"power\":%.3f,\"energy_joule\":%.3f,\"timestamp\":\"%s\"}", volt, current, power, energy_joule, timestamp);
             mqtt_publish("device/002/power", payload);
             last_publish_time_ms = now_ms;
+            energy_joule = 0.0f; // reset after publish
         }
 
         vTaskDelay(pdMS_TO_TICKS(100));
