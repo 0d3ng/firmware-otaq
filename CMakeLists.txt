@@ -20,4 +20,15 @@ message(STATUS "Building firmware version: ${FIRMWARE_VERSION}")
 
 # Add version to compile definitions for all components
 idf_build_set_property(COMPILE_DEFINITIONS "-DFIRMWARE_VERSION=\"${FIRMWARE_VERSION}\"" APPEND)
+# ==== Handle firmware algorithm from CI/CD ====
+if(NOT DEFINED FIRMWARE_ALGORITHM)
+    # default algorithm for local builds
+    set(FIRMWARE_ALGORITHM "ED25519")
+endif()
+
+message(STATUS "Using firmware algorithm: ${FIRMWARE_ALGORITHM}")
+
+# Add algorithm to compile definitions for all components
+idf_build_set_property(COMPILE_DEFINITIONS "-DFIRMWARE_ALGORITHM=\"${FIRMWARE_ALGORITHM}\"" APPEND)
+# ========================================
 # ========================================

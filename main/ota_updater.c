@@ -85,9 +85,9 @@ void ota_monitor_end_stage(const char *stage_name)
     // Publish global stage info
     char msg[512];
     snprintf(msg, sizeof(msg),
-             "{\"stage\":\"%s\",\"elapsed_ms\":%llu,\"free_heap\":%u,\"min_free_heap\":%u,\"timestamp\":\"%s\"}",
+             "{\"stage\":\"%s\",\"elapsed_ms\":%llu,\"free_heap\":%u,\"min_free_heap\":%u,\"algorithm\":\"%s\",\"timestamp\":\"%s\"}",
              stage_name, (unsigned long long)(elapsed_us / 1000),
-             (unsigned int)free_heap, (unsigned int)min_free_heap, timestamp);
+             (unsigned int)free_heap, (unsigned int)min_free_heap, FIRMWARE_ALGORITHM, timestamp);
     ESP_LOGI(TAG, "[%s] Stage %s completed in %llu ms, free_heap=%u, min_free_heap=%u", timestamp,
              stage_name, (unsigned long long)(elapsed_us / 1000), (unsigned int)free_heap, (unsigned int)min_free_heap);
     mqtt_publish("ota/metrics", msg);
@@ -111,9 +111,9 @@ void ota_monitor_end_stage(const char *stage_name)
         // Tambahkan stack info ke JSON message
         snprintf(msg, sizeof(msg),
                  "{\"stage\":\"%s\",\"task\":\"%s\",\"cpu_percent\":%.2f,"
-                 "\"stack_free\":%u,\"timestamp\":\"%s\"}",
+                 "\"stack_free\":%u,\"algorithm\":\"%s\",\"timestamp\":\"%s\"}",
                  stage_name, taskStatusArray[i].pcTaskName, cpu_percent,
-                 (unsigned)stack_free_bytes, timestamp);
+                 (unsigned)stack_free_bytes, FIRMWARE_ALGORITHM, timestamp);
 
         ESP_LOGI(TAG, "[%s] Task %s CPU usage: %.2f%%", timestamp,
                  taskStatusArray[i].pcTaskName, cpu_percent);
@@ -580,6 +580,7 @@ static bool extract_zip_and_flash_ota(const char *zip_path)
     ESP_LOGI(TAG, "[OTA] signature hex: %s", signature_hex);
     ESP_LOGI(TAG, "[OTA] new version: %s", new_version);
     ESP_LOGI(TAG, "[OTA] current version: %s", FIRMWARE_VERSION);
+    ESP_LOGI(TAG, "[OTA] signature algorithm: %s", FIRMWARE_ALGORITHM);
 
     // Compare versions using compare_firmware_versions helper
     ota_monitor_start_stage();
