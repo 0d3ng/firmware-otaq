@@ -12,8 +12,8 @@ static const char *TAG = "main_app";
 
 void app_main(void)
 {
-    printf("Running firmware version: %s\n", FIRMWARE_VERSION);
-    printf("Using signature algorithm: %s\n", FIRMWARE_ALGORITHM);
+    printf("Running firmware version    : %s\n", FIRMWARE_VERSION);
+    printf("Using signature algorithm   : %s\n", FIRMWARE_ALGORITHM);
     ESP_LOGI(TAG, "Starting system...");
     // NVS init
     esp_err_t ret = nvs_flash_init();
