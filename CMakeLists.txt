@@ -35,7 +35,7 @@ idf_build_set_property(COMPILE_DEFINITIONS "-DFIRMWARE_ALGORITHM=\"${FIRMWARE_AL
 if(DEFINED FIRMWARE_TLS)
     message(STATUS "FIRMWARE_TLS from CLI = ${FIRMWARE_TLS}")
 else()
-    option(FIRMWARE_TLS "Enable MQTT over TLS" OFF)
+    option(FIRMWARE_TLS "Enable MQTT over TLS" ON)
 endif()
 
 if(FIRMWARE_TLS)
