@@ -23,9 +23,9 @@
 #include "certs/fullchain.h"
 
 // polinema server https
-// #define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firmware/firmware.zip"
+#define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firmware/firmware.zip"
 // polinema server
-#define OTA_URL "http://broker.sinaungoding.com:8000/api/v1/firmware/firmware.zip"
+// #define OTA_URL "http://broker.sinaungoding.com:8000/api/v1/firmware/firmware.zip"
 #define TAG "OTA_SECURE"
 #define MAX_MANIFEST_SIZE 4096
 #define SIG_LEN 64
