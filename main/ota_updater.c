@@ -23,15 +23,9 @@
 #include "certs/fullchain.h"
 
 // polinema server https
-#define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firmware/firmware.zip"
+// #define OTA_URL "https://ota.sinaungoding.com:8443/api/v1/firmware/firmware.zip"
 // polinema server
-// #define OTA_URL "http://103.172.249.254:8000/api/v1/firmware/firmware.zip"
-// cloudflared server
-// #define OTA_URL "https://fastapi.sinaungoding.com/api/v1/firmware/firmware.zip"
-// apatos server
-// #define OTA_URL "http://192.168.10.102:8000/api/v1/firmware/firmware.zip"
-// local lab server
-// #define OTA_URL "http://192.168.137.1:8000/api/v1/firmware/firmware.zip"
+#define OTA_URL "http://broker.sinaungoding.com:8000/api/v1/firmware/firmware.zip"
 #define TAG "OTA_SECURE"
 #define MAX_MANIFEST_SIZE 4096
 #define SIG_LEN 64
@@ -163,10 +157,15 @@ void mount_spiffs()
 static bool download_zip_to_spiffs(const char *url)
 {
     esp_http_client_config_t config = {
+    #if FIRMWARE_TLS == 1
         .url = url,
         .cert_pem = fullchain_pem,
         .skip_cert_common_name_check = false,
-        .timeout_ms = 30000};
+    #else
+        .url = url,
+    #endif
+        .timeout_ms = 30000
+    };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (!client)

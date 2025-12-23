@@ -30,5 +30,19 @@ message(STATUS "Using firmware algorithm: ${FIRMWARE_ALGORITHM}")
 
 # Add algorithm to compile definitions for all components
 idf_build_set_property(COMPILE_DEFINITIONS "-DFIRMWARE_ALGORITHM=\"${FIRMWARE_ALGORITHM}\"" APPEND)
+
+# Add TLS configurations to compile definitions for all components
+if(DEFINED FIRMWARE_TLS)
+    message(STATUS "FIRMWARE_TLS from CLI = ${FIRMWARE_TLS}")
+else()
+    option(FIRMWARE_TLS "Enable MQTT over TLS" OFF)
+endif()
+
+if(FIRMWARE_TLS)
+    message(STATUS "Enabling MQTT over TLS")
+else()
+    message(STATUS "Disabling MQTT over TLS")
+endif()
+idf_build_set_property(COMPILE_DEFINITIONS "-DFIRMWARE_TLS=${FIRMWARE_TLS}" APPEND)
 # ========================================
 # ========================================
