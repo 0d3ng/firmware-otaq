@@ -1,4 +1,4 @@
-name: ESP-IDF Build & Secure OTA (PyNaCl)
+name: ESP-IDF Build & Secure OTA (ED25519)
 
 on:
   pull_request:
